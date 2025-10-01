@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Buscador de Documentos</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../config-visual.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-start justify-center p-6">
+
+  <div id="highlightResultOverlay" class="overlay hidden"><div id="highlightResultBox" class="modal"><h2 class="text-xl font-semibold">Resultado del Resaltado</h2><div id="highlightResultContent" class="text-left my-4"></div><button id="highlightResultClose" class="btn btn--secondary btn--full">Cerrar</button></div></div>
+  <div id="toast-container"></div>
+
+  <div id="mainContent" class="w-full max-w-4xl bg-white rounded-2xl shadow-lg">
+    <div class="bg-white border-b flex items-center justify-center py-4"><img id="publicLogo" src="" alt="Logo" class="h-10 mr-4 hidden"><h1 id="publicHeaderTitle" class="text-2xl font-bold text-center"></h1></div>
+    <nav class="border-b bg-white shadow-sm"><ul id="tabs" class="flex"><li class="tab flex-1 text-center cursor-pointer px-6 py-4 active" data-tab="tab-search">Búsqueda Inteligente</li><li class="tab flex-1 text-center cursor-pointer px-6 py-4" data-tab="tab-code">Búsqueda por Código</li></ul></nav>
+    <div class="p-6 space-y-6">
+      <div id="tab-search" class="tab-content"><h2 class="text-xl font-semibold mb-4">Búsqueda Inteligente</h2><textarea id="searchInput" rows="6" class="w-full border rounded px-3 py-2 text-lg mb-4" placeholder="Pega aquí tus códigos..."></textarea><div class="flex gap-4 mb-4"><button onclick="doSearch()" class="btn btn--primary btn--flex1 text-lg">Buscar</button><button onclick="clearSearch()" class="btn btn--secondary btn--flex1 text-lg">Limpiar</button></div><div id="search-alert" class="text-red-600 font-medium text-lg mb-4"></div><div id="results-search" class="space-y-4"></div></div>
+      <div id="tab-code" class="tab-content hidden"><h2 class="text-xl font-semibold mb-4">Búsqueda por Código</h2><div class="relative mb-4"><input id="codeInput" type="text" class="w-full border rounded px-3 py-2 text-lg" placeholder="Código (ej: ABC123)" autocomplete="off" /><div id="suggestions" class="absolute top-full left-0 right-0 bg-white border rounded-b px-2 shadow max-h-48 overflow-auto hidden z-20"></div></div><button onclick="doCodeSearch()" class="btn btn--primary btn--full mb-4 text-lg">Buscar por Código</button><div id="results-code" class="space-y-4"></div></div>
+    </div>
+  </div>
+  <script src="script.js" defer></script>
+</body>
+</html>

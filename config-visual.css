@@ -1,0 +1,24 @@
+/* config-visual.css */
+/* COLORES PARA AMBAS INTERFACES (PRINCIPAL Y PÚBLICA) */
+
+:root {
+  /* --- Colores Principales (Botones, Pestañas Activas) --- */
+  --color-primary: #F87171; /* Rojo claro principal */
+  --color-primary-hover: #DC2626; /* Rojo oscuro al pasar el ratón */
+
+  /* --- Colores Secundarios (Botones de Limpiar, Ver Códigos) --- */
+  --color-secondary: #D1D5DB; /* Gris claro */
+  --color-secondary-hover: #9CA3AF; /* Gris oscuro al pasar el ratón */
+
+  /* --- Colores Oscuros (Botón Descargar PDFs, Resaltar) --- */
+  --color-dark: #374151; /* Gris muy oscuro */
+  --color-dark-hover: #1F2937; /* Negro suave al pasar el ratón */
+  
+  /* --- Colores de Advertencia (Botón Editar) --- */
+  --color-warning: #8B5E5E; /* Marrón rojizo */
+  --color-warning-hover: #6B4542; /* Marrón más oscuro al pasar el ratón */
+  
+  /* --- Colores de Texto sobre los botones --- */
+  --color-on-light: #1F2937; /* Texto oscuro para fondos claros */
+  --color-on-dark: #FFFFFF;   /* Texto blanco para fondos oscuros */
+}
