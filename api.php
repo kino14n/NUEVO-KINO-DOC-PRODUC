@@ -1,6 +1,15 @@
 <?php 
 // api.php
 
+// Manejo de solicitud OPTIONS para CORS
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    header("Access-Control-Allow-Origin: *");
+    header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type, Authorization");
+    http_response_code(200);
+    exit();
+}
+
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
@@ -67,15 +76,12 @@ switch ($action) {
     echo json_encode(['data'=>$docs]);
     break;
 
-  // ===== LÓGICA DE BÚSQUEDA VORAZ MODIFICADA =====
   case 'search':
     $codes_to_find = array_filter(array_unique(array_map('trim', preg_split('/[\\r\\n,]+/', $_POST['codes'] ?? ''))));
     if (empty($codes_to_find)) {
         echo json_encode([]);
         exit;
     }
-
-    // 1. Obtener todos los documentos relevantes que contienen al menos uno de los códigos.
     $placeholders = implode(',', array_fill(0, count($codes_to_find), '?'));
     $stmt = $db->prepare("
         SELECT d.id, d.name, d.date, d.path, GROUP_CONCAT(c.code SEPARATOR '|') AS codes
@@ -87,7 +93,6 @@ switch ($action) {
     ");
     $stmt->execute($codes_to_find);
     $all_docs_raw = $stmt->fetchAll();
-
     $candidate_docs = [];
     foreach ($all_docs_raw as $doc) {
         $candidate_docs[$doc['id']] = [
@@ -95,53 +100,40 @@ switch ($action) {
             'name' => $doc['name'],
             'date' => $doc['date'],
             'path' => $doc['path'],
-            'codes' => explode('|', $doc['codes'])
+            'codes' => $doc['codes'] ? explode('|', $doc['codes']) : []
         ];
     }
-
-    // 2. Algoritmo Voraz para Set Cover
-    $remaining_codes = array_flip($codes_to_find); // Usar llaves para búsquedas rápidas
+    $remaining_codes = array_flip($codes_to_find);
     $selected_docs = [];
-
-    while (!empty($remaining_codes)) {
+    while (!empty($remaining_codes) && !empty($candidate_docs)) {
         $best_doc_id = -1;
-        $max_covered_count = 0;
+        $max_covered_count = -1;
         
-        // Iterar sobre los documentos candidatos para encontrar el mejor
         foreach ($candidate_docs as $doc_id => $doc) {
-            // Contar cuántos códigos restantes cubre este documento
             $covered_codes = array_intersect_key(array_flip($doc['codes']), $remaining_codes);
             $covered_count = count($covered_codes);
 
-            // Si este documento es mejor que el que teníamos, lo seleccionamos.
-            // La fecha ya está implícitamente priorizada por el ORDER BY de la consulta SQL.
             if ($covered_count > $max_covered_count) {
                 $max_covered_count = $covered_count;
                 $best_doc_id = $doc_id;
             }
         }
         
-        // Si no encontramos ningún documento que cubra más códigos, salimos del bucle.
-        if ($best_doc_id === -1) {
+        if ($best_doc_id === -1 || $max_covered_count === 0) {
             break;
         }
 
-        // 3. Añadir el mejor documento a la selección y actualizar el estado
         $best_doc = $candidate_docs[$best_doc_id];
-        $selected_docs[] = $best_doc;
+        $selected_docs[$best_doc_id] = $best_doc;
 
-        // Eliminar los códigos cubiertos de la lista de restantes
         foreach ($best_doc['codes'] as $code) {
             unset($remaining_codes[$code]);
         }
         
-        // Eliminar el documento seleccionado de los candidatos para no volver a elegirlo
         unset($candidate_docs[$best_doc_id]);
     }
-    
     echo json_encode(array_values($selected_docs));
     break;
-  // ===== FIN DE LA LÓGICA MODIFICADA =====
 
   case 'download_pdfs':
     $uploadsDir = __DIR__ . '/uploads';
@@ -213,21 +205,45 @@ switch ($action) {
     header_remove('Content-Type');
     $docId = (int)($_POST['id'] ?? 0);
     $codesToHighlight = array_filter(array_map('trim', explode(',', $_POST['codes'] ?? '')));
-    if (!$docId || empty($codesToHighlight)) { http_response_code(400); echo json_encode(['error' => 'Faltan parámetros.']); exit; }
+    if (!$docId || empty($codesToHighlight)) { 
+        http_response_code(400); 
+        echo json_encode(['error' => 'Faltan parámetros.']); 
+        exit; 
+    }
+    
     $stmt = $db->prepare('SELECT path FROM documents WHERE id = ?');
     $stmt->execute([$docId]);
     $path = $stmt->fetchColumn();
-    if (!$path || !file_exists(__DIR__ . '/uploads/' . $path)) { http_response_code(404); echo json_encode(['error' => 'Archivo no encontrado.']); exit; }
+
+    $full_path_to_check = __DIR__ . '/uploads/' . $path;
+    if (!$path || !file_exists($full_path_to_check)) {
+        http_response_code(404);
+        echo json_encode([
+            'error' => 'Archivo no encontrado en el servidor.',
+            'debug_info' => 'PHP intentó buscar el archivo en la siguiente ruta y no lo encontró: ' . $full_path_to_check
+        ]);
+        exit;
+    }
     
-    $pdfFilePath = __DIR__ . '/uploads/' . $path;
+    $pdfFilePath = $full_path_to_check;
+
+    // ===== INICIO DE LA CORRECCIÓN: Volvemos al método de envío anterior y corregimos los nombres =====
     $ch = curl_init();
-    $postData = ['codes' => implode("\n", $codesToHighlight), 'pdf' => new CURLFile($pdfFilePath, 'application/pdf', basename($pdfFilePath))];
     
-    $responseHeaders = [];
+    $postData = [
+        'specific_codes' => implode("\n", $codesToHighlight), 
+        'pdf_file'       => new CURLFile($pdfFilePath, 'application/pdf', basename($pdfFilePath))
+    ];
+
     curl_setopt($ch, CURLOPT_URL, PDF_HIGHLIGHTER_URL);
     curl_setopt($ch, CURLOPT_POST, 1);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    // ===== FIN DE LA CORRECCIÓN =====
+    
+    $responseHeaders = [];
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header) use (&$responseHeaders) {
         $len = strlen($header);
         $header = explode(':', $header, 2);
