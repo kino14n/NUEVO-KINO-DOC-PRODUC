@@ -82,6 +82,7 @@ switch ($action) {
         echo json_encode([]);
         exit;
     }
+
     $placeholders = implode(',', array_fill(0, count($codes_to_find), '?'));
     $stmt = $db->prepare("
         SELECT d.id, d.name, d.date, d.path, GROUP_CONCAT(c.code SEPARATOR '|') AS codes
@@ -93,6 +94,7 @@ switch ($action) {
     ");
     $stmt->execute($codes_to_find);
     $all_docs_raw = $stmt->fetchAll();
+
     $candidate_docs = [];
     foreach ($all_docs_raw as $doc) {
         $candidate_docs[$doc['id']] = [
@@ -103,8 +105,10 @@ switch ($action) {
             'codes' => $doc['codes'] ? explode('|', $doc['codes']) : []
         ];
     }
+
     $remaining_codes = array_flip($codes_to_find);
     $selected_docs = [];
+
     while (!empty($remaining_codes) && !empty($candidate_docs)) {
         $best_doc_id = -1;
         $max_covered_count = -1;
@@ -132,6 +136,7 @@ switch ($action) {
         
         unset($candidate_docs[$best_doc_id]);
     }
+    
     echo json_encode(array_values($selected_docs));
     break;
 
@@ -214,20 +219,18 @@ switch ($action) {
     $stmt = $db->prepare('SELECT path FROM documents WHERE id = ?');
     $stmt->execute([$docId]);
     $path = $stmt->fetchColumn();
-
     $full_path_to_check = __DIR__ . '/uploads/' . $path;
     if (!$path || !file_exists($full_path_to_check)) {
         http_response_code(404);
         echo json_encode([
             'error' => 'Archivo no encontrado en el servidor.',
-            'debug_info' => 'PHP intentó buscar el archivo en la siguiente ruta y no lo encontró: ' . $full_path_to_check
+            'debug_info' => 'PHP no pudo encontrar el archivo en la ruta: ' . $full_path_to_check
         ]);
         exit;
     }
     
     $pdfFilePath = $full_path_to_check;
 
-    // ===== INICIO DE LA CORRECCIÓN: Volvemos al método de envío anterior y corregimos los nombres =====
     $ch = curl_init();
     
     $postData = [
@@ -239,7 +242,6 @@ switch ($action) {
     curl_setopt($ch, CURLOPT_POST, 1);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    // ===== FIN DE LA CORRECCIÓN =====
     
     $responseHeaders = [];
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

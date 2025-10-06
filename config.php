@@ -1,6 +1,5 @@
 <?php
 // config.php
-// ARCHIVO DE CONFIGURACIÓN CENTRAL PARA AMBAS APLICACIONES
 
 // 1. CONFIGURACIÓN DE LA BASE DE DATOS (COMPARTIDA)
 define('DB_HOST', 'sql200.infinityfree.com');
@@ -18,8 +17,5 @@ define('PUBLIC_HEADER_TITLE', 'Buscador de Documentos');
 define('PUBLIC_LOGO_PATH', 'Logo-Kino-KB.png');
 
 // 4. URL DEL SERVICIO DE RESALTADO DE PDF
-// ===== INICIO DE LA CORRECCIÓN =====
-// Asegúrate de que la URL empiece con https://
-define('PDF_HIGHLIGHTER_URL', 'https://pdf-resaltador-new-production.up.railway.app/');
-// ===== FIN DE LA CORRECCIÓN =====
+define('PDF_HIGHLIGHTER_URL', 'https://buscadordockino1-production.up.railway.app/highlight');
 ?>
