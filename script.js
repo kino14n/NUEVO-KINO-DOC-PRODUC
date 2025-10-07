@@ -1,5 +1,5 @@
 // script.js
-// Versión 1.9: Aplicada la solución final sugerida por el usuario con event listeners delegados.
+// Versión 2.0: Corregido error de carga de DOM
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -27,17 +27,6 @@ function stopPolling() {
     if (intervalId !== null) clearInterval(intervalId);
     intervalId = null;
 }
-
-document.getElementById('submitAccess').onclick = () => {
-    if (document.getElementById('accessInput').value === ACCESS_KEY) {
-        document.getElementById('loginOverlay').classList.add('hidden');
-        document.getElementById('mainContent').classList.remove('hidden');
-        initApp();
-    } else {
-        document.getElementById('errorMsg').classList.remove('hidden');
-    }
-};
-document.getElementById('accessInput').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('submitAccess').click(); });
 
 function toast(msg, type = 'info', d = 4000) {
     const c = document.getElementById('toast-container');
@@ -90,7 +79,7 @@ async function applyConfig() {
 function initApp() {
     applyConfig();
     
-    // ✅ TU SOLUCIÓN: Event listener delegado para manejar todos los clics en botones dinámicos.
+    // Event listener delegado para manejar todos los clics en botones dinámicos
     document.getElementById('mainContent').addEventListener('click', (event) => {
         const target = event.target.closest('button');
         if (!target) return;
@@ -167,7 +156,6 @@ function initApp() {
     document.querySelector('.tab.active').click();
 }
 
-// ✅ TU SOLUCIÓN: La función render ahora usa data-attributes para el botón de resaltar.
 function render(items, containerId, isSearchResult) {
     const container = document.getElementById(containerId);
     if (!items || items.length === 0) {
@@ -246,32 +234,8 @@ function clearUploadForm(event) {
     if (event) event.preventDefault();
     document.getElementById('form-upload').reset();
     document.getElementById('docId').value = '';
-    document.getElementById('editing-indicator').classList.add('hidden');
-    document.getElementById('cancel-edit-btn').classList.add('hidden');
     toast('Formulario limpiado. Listo para subir un nuevo documento.', 'info');
 }
-
-document.getElementById('form-upload').onsubmit = async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    if (form.file.files[0] && form.file.files[0].size > 10 * 1024 * 1024) {
-        document.getElementById('uploadWarning').classList.remove('hidden');
-        return;
-    }
-    document.getElementById('uploadWarning').classList.add('hidden');
-    let codesArray = form.codes.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    form.codes.value = codesArray.join('\n');
-    const formData = new FormData(form);
-    formData.append('action', document.getElementById('docId').value ? 'edit' : 'upload');
-    try {
-        const response = await fetch(api, { method: 'POST', body: formData });
-        await handleApiResponse(response);
-        clearUploadForm();
-        document.querySelector('[data-tab="tab-list"]').click();
-    } catch (error) {
-        // Error manejado por handleApiResponse
-    }
-};
 
 function clearConsultFilter() {
     document.getElementById('consultFilterInput').value = '';
@@ -306,43 +270,6 @@ function downloadPdfs() {
     window.location.href = `${api}?action=download_pdfs`;
 }
 
-(function () {
-    const codeInput = document.getElementById('codeInput');
-    const suggestions = document.getElementById('suggestions');
-    let timeoutId;
-    codeInput.addEventListener('input', () => {
-        clearTimeout(timeoutId);
-        const term = codeInput.value.trim();
-        if (!term) {
-            suggestions.classList.add('hidden');
-            return;
-        }
-        timeoutId = setTimeout(async () => {
-            const response = await fetch(`${api}?action=suggest&term=${encodeURIComponent(term)}`);
-            const data = await response.json();
-            if (data.length) {
-                suggestions.innerHTML = data.map(code => `<div class="py-1 px-2 hover:bg-gray-100 cursor-pointer" data-code="${code}">${code}</div>`).join('');
-                suggestions.classList.remove('hidden');
-            } else {
-                suggestions.classList.add('hidden');
-            }
-        }, 200);
-    });
-    suggestions.addEventListener('click', e => {
-        const code = e.target.dataset.code;
-        if (code) {
-            codeInput.value = code;
-            suggestions.classList.add('hidden');
-            doCodeSearch();
-        }
-    });
-    document.addEventListener('click', (e) => {
-        if (!suggestions.contains(e.target) && e.target !== codeInput) {
-            suggestions.classList.add('hidden');
-        }
-    });
-})();
-
 function clearCode() {
     document.getElementById('codeInput').value = '';
     document.getElementById('results-code').innerHTML = '';
@@ -372,8 +299,6 @@ function editDoc(id) {
         document.getElementById('name').value = doc.name;
         document.getElementById('date').value = doc.date;
         document.getElementById('codes').value = (doc.codes || []).join('\n');
-        document.getElementById('editing-indicator').classList.remove('hidden');
-        document.getElementById('cancel-edit-btn').classList.remove('hidden');
     }
 }
 
@@ -435,3 +360,80 @@ async function highlightPdf(docId, codes) {
         console.error('Error CRÍTICO en la solicitud fetch:', error);
     }
 }
+
+// ===== INICIALIZACIÓN AL CARGAR EL DOM =====
+document.addEventListener('DOMContentLoaded', () => {
+    // Configurar el login
+    document.getElementById('submitAccess').onclick = () => {
+        if (document.getElementById('accessInput').value === ACCESS_KEY) {
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('mainContent').classList.remove('hidden');
+            initApp();
+        } else {
+            document.getElementById('errorMsg').classList.remove('hidden');
+        }
+    };
+    
+    document.getElementById('accessInput').addEventListener('keypress', e => { 
+        if (e.key === 'Enter') document.getElementById('submitAccess').click(); 
+    });
+
+    // Configurar el formulario de subida
+    document.getElementById('form-upload').onsubmit = async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        if (form.file.files[0] && form.file.files[0].size > 10 * 1024 * 1024) {
+            document.getElementById('uploadWarning').classList.remove('hidden');
+            return;
+        }
+        document.getElementById('uploadWarning').classList.add('hidden');
+        let codesArray = form.codes.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        form.codes.value = codesArray.join('\n');
+        const formData = new FormData(form);
+        formData.append('action', document.getElementById('docId').value ? 'edit' : 'upload');
+        try {
+            const response = await fetch(api, { method: 'POST', body: formData });
+            await handleApiResponse(response);
+            clearUploadForm();
+            document.querySelector('[data-tab="tab-list"]').click();
+        } catch (error) {
+            // Error manejado por handleApiResponse
+        }
+    };
+
+    // Configurar autocompletado de códigos
+    const codeInput = document.getElementById('codeInput');
+    const suggestions = document.getElementById('suggestions');
+    let timeoutId;
+    codeInput.addEventListener('input', () => {
+        clearTimeout(timeoutId);
+        const term = codeInput.value.trim();
+        if (!term) {
+            suggestions.classList.add('hidden');
+            return;
+        }
+        timeoutId = setTimeout(async () => {
+            const response = await fetch(`${api}?action=suggest&term=${encodeURIComponent(term)}`);
+            const data = await response.json();
+            if (data.length) {
+                suggestions.innerHTML = data.map(code => `<div class="py-1 px-2 hover:bg-gray-100 cursor-pointer" data-code="${code}">${code}</div>`).join('');
+                suggestions.classList.remove('hidden');
+            } else {
+                suggestions.classList.add('hidden');
+            }
+        }, 200);
+    });
+    suggestions.addEventListener('click', e => {
+        const code = e.target.dataset.code;
+        if (code) {
+            codeInput.value = code;
+            suggestions.classList.add('hidden');
+            doCodeSearch();
+        }
+    });
+    document.addEventListener('click', (e) => {
+        if (!suggestions.contains(e.target) && e.target !== codeInput) {
+            suggestions.classList.add('hidden');
+        }
+    });
+});
