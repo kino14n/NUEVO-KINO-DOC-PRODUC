@@ -1,5 +1,5 @@
 // script.js
-// Versión 1.3: Refactorizado el manejador de eventos para el botón 'Resaltar'.
+// Versión 1.4: Añadidos marcadores de depuración en la función de resaltado.
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -78,17 +78,13 @@ async function applyConfig() {
 function initApp() {
     applyConfig();
 
-    // ---- NUEVO MANEJADOR DE EVENTOS DELEGADO ----
-    // Escucha clics en todo el contenedor principal para manejar acciones dinámicas.
     document.getElementById('mainContent').addEventListener('click', (event) => {
         const target = event.target;
-        // Si se hizo clic en un botón de resaltar
         if (target && target.matches('button.btn-highlight')) {
             const docId = target.dataset.id;
             const codes = target.dataset.codes;
             highlightPdf(docId, codes);
         }
-        // Si se hizo clic en un botón de ver/ocultar códigos
         if (target && target.matches('button.btn-toggle-codes')) {
             toggleCodes(target);
         }
@@ -140,7 +136,6 @@ function initApp() {
     document.querySelector('.tab.active').click();
 }
 
-// ---- FUNCIÓN RENDER MODIFICADA ----
 function render(items, containerId, isSearchResult) {
     const container = document.getElementById(containerId);
     if (!items || items.length === 0) { container.innerHTML = '<p class="text-gray-500">No se encontraron documentos.</p>'; return; }
@@ -148,7 +143,6 @@ function render(items, containerId, isSearchResult) {
     container.innerHTML = items.map(item => {
         const codesArray = Array.isArray(item.codes) ? item.codes : [];
         const codesStringForDataAttr = codesArray.join(',');
-        // Escapamos las comillas dobles para que no rompan el atributo HTML
         const escapedCodes = codesStringForDataAttr.replace(/"/g, '&quot;');
         const codesStringForDisplay = codesArray.join('\n');
         
@@ -299,15 +293,35 @@ function toggleCodes(btn) {
 }
 
 async function highlightPdf(docId, codes) {
-    if (!codes) { toast('Este documento no tiene códigos asociados para resaltar.', 'info'); return; }
+    // --- MARCADOR 1: INICIO DE LA FUNCIÓN ---
+    console.log(`[MARCADOR JS 1] Iniciando highlightPdf. Documento ID: ${docId}`);
+    console.log(`[MARCADOR JS 2] Códigos recibidos (string):`, codes);
+
+    if (!codes) {
+        toast('Este documento no tiene códigos asociados para resaltar.', 'info');
+        console.warn('[MARCADOR JS 3] Proceso detenido: no hay códigos.');
+        return;
+    }
+
     toast('Procesando PDF, por favor espera...', 'info');
+    
     const formData = new FormData();
     formData.append('action', 'highlight_pdf');
     formData.append('id', docId);
     formData.append('codes', codes);
+
+    // --- MARCADOR 2: DATOS A PUNTO DE SER ENVIADOS ---
+    console.log('[MARCADOR JS 3] FormData preparado para enviar a api.php:');
+    for (let [key, value] of formData.entries()) {
+        console.log(`  - ${key}: ${value}`);
+    }
+
     try {
         const response = await fetch(api, { method: 'POST', body: formData });
+        console.log('[MARCADOR JS 4] Respuesta recibida de api.php. Status:', response.status);
+
         if (response.ok && response.headers.get('Content-Type')?.includes('application/pdf')) {
+            console.log('[MARCADOR JS 5] La respuesta es un PDF. Procesando para mostrar.');
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             window.open(url, '_blank');
@@ -320,9 +334,12 @@ async function highlightPdf(docId, codes) {
             if (pagesFound.length > 0) { pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; }
             resultContent.innerHTML = `<p class="mb-4">El PDF resaltado se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="resaltado.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
             resultModal.classList.remove('hidden');
-        } else { await handleApiResponse(response); }
+        } else {
+            console.error('[MARCADOR JS 5] La respuesta NO es un PDF. Es un error. Procesando como JSON.');
+            await handleApiResponse(response);
+        }
     } catch (error) {
         toast('Falló la comunicación con el servicio de resaltado.', 'error');
-        console.error('Error en highlightPdf:', error);
+        console.error('[MARCADOR JS 6] Error CRÍTICO en la solicitud fetch:', error);
     }
 }
