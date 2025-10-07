@@ -1,5 +1,4 @@
-// script.js
-// Versión 2.0: Corregido error de carga de DOM
+// script.js - Versión Final Corregida
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -8,7 +7,6 @@
         }
         orig.apply(console, args);
     };
-    window.onerror = function () { return true; };
 })();
 
 const api = './api.php';
@@ -30,6 +28,7 @@ function stopPolling() {
 
 function toast(msg, type = 'info', d = 4000) {
     const c = document.getElementById('toast-container');
+    if (!c) return;
     const e = document.createElement('div');
     e.className = `toast ${type}`;
     e.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()">×</button>`;
@@ -65,7 +64,8 @@ async function applyConfig() {
     try {
         const response = await fetch(`${api}?action=get_config`);
         const config = await response.json();
-        document.getElementById('appHeaderTitle').textContent = config.headerTitle || 'Buscador';
+        const titleEl = document.getElementById('appHeaderTitle');
+        if (titleEl) titleEl.textContent = config.headerTitle || 'Buscador';
         const appLogo = document.getElementById('appLogo');
         if (appLogo && config.logoPath) {
             appLogo.src = config.logoPath;
@@ -79,57 +79,72 @@ async function applyConfig() {
 function initApp() {
     applyConfig();
     
-    // Event listener delegado para manejar todos los clics en botones dinámicos
-    document.getElementById('mainContent').addEventListener('click', (event) => {
-        const target = event.target.closest('button');
-        if (!target) return;
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent) {
+        mainContent.addEventListener('click', (event) => {
+            const target = event.target.closest('button');
+            if (!target) return;
 
-        if (target.matches('.btn-highlight')) {
-            const docId = target.dataset.id;
-            const codes = target.dataset.codes;
-            highlightPdf(docId, codes);
-        }
-        
-        if (target.matches('.btn-toggle-codes')) {
-            toggleCodes(target);
-        }
-    });
+            if (target.classList.contains('btn-highlight')) {
+                const docId = target.dataset.id;
+                const codes = target.dataset.codes;
+                highlightPdf(docId, codes);
+            }
+            
+            if (target.classList.contains('btn-toggle-codes')) {
+                toggleCodes(target);
+            }
+        });
+    }
 
     const deleteKeyInput = document.getElementById('deleteKeyInput');
-    document.getElementById('deleteKeyOk').onclick = async () => {
-        if (deleteKeyInput.value !== DELETION_KEY) {
-            document.getElementById('deleteKeyError').classList.remove('hidden');
+    const deleteKeyOk = document.getElementById('deleteKeyOk');
+    const deleteKeyCancel = document.getElementById('deleteKeyCancel');
+    
+    if (deleteKeyOk) {
+        deleteKeyOk.onclick = async () => {
+            if (deleteKeyInput.value !== DELETION_KEY) {
+                document.getElementById('deleteKeyError').classList.remove('hidden');
+                deleteKeyInput.value = '';
+                deleteKeyInput.focus();
+                return;
+            }
+            document.getElementById('deleteOverlay').classList.add('hidden');
+            document.getElementById('deleteKeyError').classList.add('hidden');
             deleteKeyInput.value = '';
-            deleteKeyInput.focus();
-            return;
-        }
-        document.getElementById('deleteOverlay').classList.add('hidden');
-        document.getElementById('deleteKeyError').classList.add('hidden');
-        deleteKeyInput.value = '';
-        const ok = await confirmDialog('¿Está seguro de eliminar este documento? Esta acción no se puede deshacer.');
-        if (ok) {
-            await deleteDoc(pendingDeleteId);
-        }
-    };
-    document.getElementById('deleteKeyCancel').onclick = () => {
-        document.getElementById('deleteOverlay').classList.add('hidden');
-        document.getElementById('deleteKeyError').classList.add('hidden');
-        deleteKeyInput.value = '';
-    };
-    document.getElementById('highlightResultClose').onclick = () => {
-        document.getElementById('highlightResultOverlay').classList.add('hidden');
-    };
+            const ok = await confirmDialog('¿Está seguro de eliminar este documento? Esta acción no se puede deshacer.');
+            if (ok) {
+                await deleteDoc(pendingDeleteId);
+            }
+        };
+    }
+    
+    if (deleteKeyCancel) {
+        deleteKeyCancel.onclick = () => {
+            document.getElementById('deleteOverlay').classList.add('hidden');
+            document.getElementById('deleteKeyError').classList.add('hidden');
+            deleteKeyInput.value = '';
+        };
+    }
+    
+    const highlightClose = document.getElementById('highlightResultClose');
+    if (highlightClose) {
+        highlightClose.onclick = () => {
+            document.getElementById('highlightResultOverlay').classList.add('hidden');
+        };
+    }
 
     async function refreshList() {
         try {
             const response = await fetch(`${api}?action=list`);
             const json = await handleApiResponse(response);
             fullList = json.data || [];
-            if (document.querySelector('.tab.active').dataset.tab === 'tab-list') {
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab && activeTab.dataset.tab === 'tab-list') {
                 doConsultFilter();
             }
         } catch (error) {
-            // Error manejado por handleApiResponse
+            console.error('Error al refrescar lista:', error);
         }
     }
 
@@ -141,7 +156,9 @@ function initApp() {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             tab.classList.add('active');
-            document.getElementById(tab.dataset.tab).classList.remove('hidden');
+            const tabContent = document.getElementById(tab.dataset.tab);
+            if (tabContent) tabContent.classList.remove('hidden');
+            
             if (tab.dataset.tab === 'tab-list') {
                 refreshList();
                 startPolling(refreshList);
@@ -153,15 +170,20 @@ function initApp() {
             }
         };
     });
-    document.querySelector('.tab.active').click();
+    
+    const firstTab = document.querySelector('.tab.active');
+    if (firstTab) firstTab.click();
 }
 
 function render(items, containerId, isSearchResult) {
     const container = document.getElementById(containerId);
+    if (!container) return;
+    
     if (!items || items.length === 0) {
         container.innerHTML = '<p class="text-gray-500">No se encontraron documentos.</p>';
         return;
     }
+    
     container.innerHTML = items.map(item => {
         const codesArray = Array.isArray(item.codes) ? item.codes : [];
         const codesStringForDisplay = codesArray.join('\n');
@@ -200,9 +222,12 @@ function render(items, containerId, isSearchResult) {
 }
 
 function clearSearch() {
-    document.getElementById('searchInput').value = '';
-    document.getElementById('results-search').innerHTML = '';
-    document.getElementById('search-alert').innerText = '';
+    const input = document.getElementById('searchInput');
+    const results = document.getElementById('results-search');
+    const alert = document.getElementById('search-alert');
+    if (input) input.value = '';
+    if (results) results.innerHTML = '';
+    if (alert) alert.innerText = '';
 }
 
 async function doSearch() {
@@ -222,7 +247,10 @@ async function doSearch() {
         const data = await response.json();
         const foundCodes = new Set(data.flatMap(doc => doc.codes || []));
         const missingCodes = codes.filter(c => !foundCodes.has(c));
-        document.getElementById('search-alert').innerText = missingCodes.length ? 'Códigos no encontrados: ' + missingCodes.join(', ') : '';
+        const alertEl = document.getElementById('search-alert');
+        if (alertEl) {
+            alertEl.innerText = missingCodes.length ? 'Códigos no encontrados: ' + missingCodes.join(', ') : '';
+        }
         render(data, 'results-search', true);
     } catch (error) {
         toast('Error de red al realizar la búsqueda.', 'error');
@@ -232,18 +260,22 @@ async function doSearch() {
 
 function clearUploadForm(event) {
     if (event) event.preventDefault();
-    document.getElementById('form-upload').reset();
-    document.getElementById('docId').value = '';
+    const form = document.getElementById('form-upload');
+    const docId = document.getElementById('docId');
+    if (form) form.reset();
+    if (docId) docId.value = '';
     toast('Formulario limpiado. Listo para subir un nuevo documento.', 'info');
 }
 
 function clearConsultFilter() {
-    document.getElementById('consultFilterInput').value = '';
+    const input = document.getElementById('consultFilterInput');
+    if (input) input.value = '';
     doConsultFilter();
 }
 
 function doConsultFilter() {
-    const term = document.getElementById('consultFilterInput').value.trim().toLowerCase();
+    const input = document.getElementById('consultFilterInput');
+    const term = input ? input.value.trim().toLowerCase() : '';
     const filtered = fullList.filter(doc => doc.name.toLowerCase().includes(term) || doc.path.toLowerCase().includes(term));
     render(filtered, 'results-list', false);
 }
@@ -271,12 +303,15 @@ function downloadPdfs() {
 }
 
 function clearCode() {
-    document.getElementById('codeInput').value = '';
-    document.getElementById('results-code').innerHTML = '';
+    const input = document.getElementById('codeInput');
+    const results = document.getElementById('results-code');
+    if (input) input.value = '';
+    if (results) results.innerHTML = '';
 }
 
 async function doCodeSearch() {
-    const code = document.getElementById('codeInput').value.trim();
+    const input = document.getElementById('codeInput');
+    const code = input ? input.value.trim() : '';
     if (!code) return;
     const formData = new FormData();
     formData.append('action', 'search_by_code');
@@ -293,7 +328,8 @@ async function doCodeSearch() {
 function editDoc(id) {
     const doc = fullList.find(d => d.id === id);
     if (doc) {
-        document.querySelector('[data-tab="tab-upload"]').click();
+        const uploadTab = document.querySelector('[data-tab="tab-upload"]');
+        if (uploadTab) uploadTab.click();
         clearUploadForm();
         document.getElementById('docId').value = doc.id;
         document.getElementById('name').value = doc.name;
@@ -306,21 +342,25 @@ async function deleteDoc(id) {
     try {
         const response = await fetch(`${api}?action=delete&id=${id}`);
         await handleApiResponse(response);
-        document.querySelector('.tab.active').click();
+        const activeTab = document.querySelector('.tab.active');
+        if (activeTab) activeTab.click();
     } catch (error) {
-        // Error manejado por handleApiResponse
+        console.error('Error al eliminar:', error);
     }
 }
 
 function requestDelete(id) {
     pendingDeleteId = id;
-    document.getElementById('deleteOverlay').classList.remove('hidden');
-    document.getElementById('deleteKeyInput').focus();
+    const overlay = document.getElementById('deleteOverlay');
+    const input = document.getElementById('deleteKeyInput');
+    if (overlay) overlay.classList.remove('hidden');
+    if (input) input.focus();
 }
 
 function toggleCodes(btn) {
     const id = btn.dataset.id;
     const pre = document.getElementById(`codes${id}`);
+    if (!pre) return;
     const isHidden = pre.classList.toggle('hidden');
     btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos';
 }
@@ -328,7 +368,7 @@ function toggleCodes(btn) {
 async function highlightPdf(docId, codes) {
     if (!docId || !codes || codes.trim() === "") {
         toast('Error: Faltan el ID del documento o los códigos para resaltar.', 'error');
-        console.error(`Llamada a highlightPdf bloqueada por parámetros inválidos. ID: ${docId}, Códigos: '${codes}'`);
+        console.error(`Llamada a highlightPdf bloqueada. ID: ${docId}, Códigos: '${codes}'`);
         return;
     }
 
@@ -339,101 +379,141 @@ async function highlightPdf(docId, codes) {
     formData.append('codes', codes);
     try {
         const response = await fetch(api, { method: 'POST', body: formData });
-        if (response.ok && response.headers.get('Content-Type')?.includes('application/pdf')) {
+        const contentType = response.headers.get('Content-Type');
+        if (response.ok && contentType && contentType.includes('application/pdf')) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             window.open(url, '_blank');
             let pagesFound = [];
             const pagesHeader = response.headers.get('X-Pages-Found');
-            if (pagesHeader) { try { pagesFound = JSON.parse(pagesHeader); } catch (e) { console.error("Error al parsear X-Pages-Found:", e); } }
+            if (pagesHeader) { 
+                try { 
+                    pagesFound = JSON.parse(pagesHeader); 
+                } catch (e) { 
+                    console.error("Error al parsear X-Pages-Found:", e); 
+                } 
+            }
             const resultModal = document.getElementById('highlightResultOverlay');
             const resultContent = document.getElementById('highlightResultContent');
             let pagesHtml = '<p class="font-semibold">No se encontraron los códigos en el contenido del PDF.</p><p>Puedes descargar el archivo original para revisarlo.</p>';
-            if (pagesFound.length > 0) { pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; }
-            resultContent.innerHTML = `<p class="mb-4">El PDF resaltado se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="resaltado.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
-            resultModal.classList.remove('hidden');
+            if (pagesFound.length > 0) { 
+                pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; 
+            }
+            if (resultContent) {
+                resultContent.innerHTML = `<p class="mb-4">El PDF resaltado se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="resaltado.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
+            }
+            if (resultModal) resultModal.classList.remove('hidden');
         } else {
             await handleApiResponse(response);
         }
     } catch (error) {
         toast('Falló la comunicación con el servicio de resaltado.', 'error');
-        console.error('Error CRÍTICO en la solicitud fetch:', error);
+        console.error('Error CRÍTICO en highlightPdf:', error);
     }
 }
 
-// ===== INICIALIZACIÓN AL CARGAR EL DOM =====
-document.addEventListener('DOMContentLoaded', () => {
-    // Configurar el login
-    document.getElementById('submitAccess').onclick = () => {
-        if (document.getElementById('accessInput').value === ACCESS_KEY) {
-            document.getElementById('loginOverlay').classList.add('hidden');
-            document.getElementById('mainContent').classList.remove('hidden');
-            initApp();
-        } else {
-            document.getElementById('errorMsg').classList.remove('hidden');
-        }
-    };
+// INICIALIZACIÓN
+document.addEventListener('DOMContentLoaded', function() {
+    const submitBtn = document.getElementById('submitAccess');
+    const accessInput = document.getElementById('accessInput');
+    const loginOverlay = document.getElementById('loginOverlay');
+    const mainContent = document.getElementById('mainContent');
+    const errorMsg = document.getElementById('errorMsg');
     
-    document.getElementById('accessInput').addEventListener('keypress', e => { 
-        if (e.key === 'Enter') document.getElementById('submitAccess').click(); 
-    });
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            if (accessInput && accessInput.value === ACCESS_KEY) {
+                if (loginOverlay) loginOverlay.classList.add('hidden');
+                if (mainContent) mainContent.classList.remove('hidden');
+                initApp();
+            } else {
+                if (errorMsg) errorMsg.classList.remove('hidden');
+            }
+        });
+    }
+    
+    if (accessInput) {
+        accessInput.addEventListener('keypress', function(e) { 
+            if (e.key === 'Enter' && submitBtn) submitBtn.click(); 
+        });
+    }
 
-    // Configurar el formulario de subida
-    document.getElementById('form-upload').onsubmit = async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        if (form.file.files[0] && form.file.files[0].size > 10 * 1024 * 1024) {
-            document.getElementById('uploadWarning').classList.remove('hidden');
-            return;
-        }
-        document.getElementById('uploadWarning').classList.add('hidden');
-        let codesArray = form.codes.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-        form.codes.value = codesArray.join('\n');
-        const formData = new FormData(form);
-        formData.append('action', document.getElementById('docId').value ? 'edit' : 'upload');
-        try {
-            const response = await fetch(api, { method: 'POST', body: formData });
-            await handleApiResponse(response);
-            clearUploadForm();
-            document.querySelector('[data-tab="tab-list"]').click();
-        } catch (error) {
-            // Error manejado por handleApiResponse
-        }
-    };
+    const uploadForm = document.getElementById('form-upload');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileInput = uploadForm.querySelector('[name="file"]');
+            const warningEl = document.getElementById('uploadWarning');
+            
+            if (fileInput && fileInput.files[0] && fileInput.files[0].size > 10 * 1024 * 1024) {
+                if (warningEl) warningEl.classList.remove('hidden');
+                return;
+            }
+            if (warningEl) warningEl.classList.add('hidden');
+            
+            const codesField = uploadForm.querySelector('[name="codes"]');
+            if (codesField) {
+                let codesArray = codesField.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                codesField.value = codesArray.join('\n');
+            }
+            
+            const formData = new FormData(uploadForm);
+            const docId = document.getElementById('docId');
+            formData.append('action', docId && docId.value ? 'edit' : 'upload');
+            
+            try {
+                const response = await fetch(api, { method: 'POST', body: formData });
+                await handleApiResponse(response);
+                clearUploadForm();
+                const listTab = document.querySelector('[data-tab="tab-list"]');
+                if (listTab) listTab.click();
+            } catch (error) {
+                console.error('Error en upload:', error);
+            }
+        });
+    }
 
-    // Configurar autocompletado de códigos
     const codeInput = document.getElementById('codeInput');
     const suggestions = document.getElementById('suggestions');
     let timeoutId;
-    codeInput.addEventListener('input', () => {
-        clearTimeout(timeoutId);
-        const term = codeInput.value.trim();
-        if (!term) {
-            suggestions.classList.add('hidden');
-            return;
-        }
-        timeoutId = setTimeout(async () => {
-            const response = await fetch(`${api}?action=suggest&term=${encodeURIComponent(term)}`);
-            const data = await response.json();
-            if (data.length) {
-                suggestions.innerHTML = data.map(code => `<div class="py-1 px-2 hover:bg-gray-100 cursor-pointer" data-code="${code}">${code}</div>`).join('');
-                suggestions.classList.remove('hidden');
-            } else {
+    
+    if (codeInput && suggestions) {
+        codeInput.addEventListener('input', function() {
+            clearTimeout(timeoutId);
+            const term = codeInput.value.trim();
+            if (!term) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+            timeoutId = setTimeout(async function() {
+                try {
+                    const response = await fetch(`${api}?action=suggest&term=${encodeURIComponent(term)}`);
+                    const data = await response.json();
+                    if (data.length) {
+                        suggestions.innerHTML = data.map(code => `<div class="py-1 px-2 hover:bg-gray-100 cursor-pointer" data-code="${code}">${code}</div>`).join('');
+                        suggestions.classList.remove('hidden');
+                    } else {
+                        suggestions.classList.add('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error en sugerencias:', error);
+                }
+            }, 200);
+        });
+        
+        suggestions.addEventListener('click', function(e) {
+            const code = e.target.dataset.code;
+            if (code) {
+                codeInput.value = code;
+                suggestions.classList.add('hidden');
+                doCodeSearch();
+            }
+        });
+        
+        document.addEventListener('click', function(e) {
+            if (!suggestions.contains(e.target) && e.target !== codeInput) {
                 suggestions.classList.add('hidden');
             }
-        }, 200);
-    });
-    suggestions.addEventListener('click', e => {
-        const code = e.target.dataset.code;
-        if (code) {
-            codeInput.value = code;
-            suggestions.classList.add('hidden');
-            doCodeSearch();
-        }
-    });
-    document.addEventListener('click', (e) => {
-        if (!suggestions.contains(e.target) && e.target !== codeInput) {
-            suggestions.classList.add('hidden');
-        }
-    });
+        });
+    }
 });
