@@ -222,8 +222,8 @@ async function doSearch() {
     if (!rawInput) return;
     const codes = [...new Set(
         rawInput
-            .split(/\\r?\\n/)
-            .map(line => line.trim().split(/\\s+/)[0])
+            .split(/\r?\n/)
+            .map(line => line.trim().split(/\s+/)[0])
             .filter(Boolean)
     )];
     const formData = new FormData();
@@ -259,7 +259,7 @@ document.getElementById('form-upload').onsubmit = async (e) => {
         return;
     }
     document.getElementById('uploadWarning').classList.add('hidden');
-    let codesArray = form.codes.value.split(/\\r?\\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    let codesArray = form.codes.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     form.codes.value = codesArray.join('\n');
     const formData = new FormData(form);
     formData.append('action', document.getElementById('docId').value ? 'edit' : 'upload');
@@ -285,11 +285,11 @@ function doConsultFilter() {
 }
 
 function downloadCsv() {
-    let csv = 'Código,Documento\\n';
+    let csv = 'Código,Documento\n';
     fullList.forEach(doc => {
         if (doc.codes && doc.codes.length) {
             doc.codes.forEach(code => {
-                csv += `"${code.replace(/"/g, '""')}","${doc.name.replace(/"/g, '""')}"\\n`;
+                csv += `"${code.replace(/"/g, '""')}","${doc.name.replace(/"/g, '""')}"\n`;
             });
         }
     });
