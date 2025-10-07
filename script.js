@@ -1,5 +1,5 @@
 // script.js
-// Versión 1.5: Blindaje del manejador de eventos y la función de resaltado con verificaciones de ID.
+// Versión 1.6: Implementada la solución de validación sugerida por el usuario para corregir el error de resaltado.
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -74,33 +74,16 @@ async function applyConfig() {
 function initApp() {
     applyConfig();
     
-    // ---- MANEJADOR DE EVENTOS REFORZADO CON PUNTOS DE CONTROL ----
     document.getElementById('mainContent').addEventListener('click', (event) => {
         const target = event.target;
-        // Solo nos interesan los clics en botones
         if (!target || target.tagName !== 'BUTTON') return;
 
-        // Punto de control para el botón de resaltar
         if (target.matches('button.btn-highlight')) {
-            console.log('[PUNTO DE CONTROL 1] Clic detectado en un botón de resaltar.');
             const docId = target.dataset.id;
             const codes = target.dataset.codes;
-            
-            console.log(`[PUNTO DE CONTROL 2] Leyendo atributos... ID: ${docId}, Códigos: ${codes}`);
-
-            // BARRERA DE SEGURIDAD: Si el ID es nulo, indefinido o vacío, detenemos todo aquí.
-            if (!docId || docId === 'undefined' || docId === null) {
-                const errorMsg = "Error de Interfaz Crítico: No se pudo leer el ID del documento desde el botón. La petición fue bloqueada.";
-                toast(errorMsg, 'error', 8000);
-                console.error(errorMsg, "Elemento del botón problemático:", target);
-                return; // Detiene la ejecución por completo.
-            }
-
-            console.log('[PUNTO DE CONTROL 3] El ID es válido. Llamando a highlightPdf...');
             highlightPdf(docId, codes);
         }
         
-        // Punto de control para ver/ocultar códigos
         if (target.matches('button.btn-toggle-codes')) {
             toggleCodes(target);
         }
@@ -152,19 +135,23 @@ function initApp() {
     document.querySelector('.tab.active').click();
 }
 
+// ---- FUNCIÓN RENDER CORREGIDA ----
 function render(items, containerId, isSearchResult) {
     const container = document.getElementById(containerId);
     if (!items || items.length === 0) { container.innerHTML = '<p class="text-gray-500">No se encontraron documentos.</p>'; return; }
     
     container.innerHTML = items.map(item => {
         const codesArray = Array.isArray(item.codes) ? item.codes : [];
-        const codesStringForDataAttr = codesArray.join(',');
-        const escapedCodes = codesStringForDataAttr.replace(/"/g, '&quot;');
         const codesStringForDisplay = codesArray.join('\n');
         
         let actionButtons = '';
         if (isSearchResult) {
-            actionButtons = `<button class="btn btn--dark px-2 py-1 text-base btn-highlight" data-id="${item.id}" data-codes="${escapedCodes}">Resaltar Códigos</button>`;
+            // ✅ SOLUCIÓN 1: Validar si existen códigos ANTES de crear el botón.
+            if (codesArray.length > 0) {
+                const codesStringForDataAttr = codesArray.join(',');
+                const escapedCodes = codesStringForDataAttr.replace(/"/g, '&quot;');
+                actionButtons = `<button class="btn btn--dark px-2 py-1 text-base btn-highlight" data-id="${item.id}" data-codes="${escapedCodes}">Resaltar Códigos</button>`;
+            }
         } else {
             actionButtons = `<button onclick="editDoc(${item.id})" class="btn btn--warning px-2 py-1 text-base">Editar</button> <button onclick="requestDelete(${item.id})" class="btn btn--primary px-2 py-1 text-base">Eliminar</button>`;
         }
@@ -304,19 +291,24 @@ function toggleCodes(btn) {
     btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos';
 }
 
+// ---- FUNCIÓN highlightPdf BLINDADA ----
 async function highlightPdf(docId, codes) {
+    // ✅ SOLUCIÓN 2: Blindar la función para que nunca falle, sin importar lo que reciba.
+    if (!docId || !codes || codes.trim() === "") {
+        toast('Error: Faltan el ID del documento o los códigos para resaltar.', 'error');
+        console.error(`Llamada a highlightPdf bloqueada por parámetros inválidos. ID: ${docId}, Códigos: '${codes}'`);
+        return;
+    }
+
     toast('Procesando PDF, por favor espera...', 'info');
     const formData = new FormData();
     formData.append('action', 'highlight_pdf');
     formData.append('id', docId);
     formData.append('codes', codes);
     
-    console.log('[PUNTO DE CONTROL 4] Enviando a api.php...');
     try {
         const response = await fetch(api, { method: 'POST', body: formData });
-        console.log('[PUNTO DE CONTROL 5] Respuesta recibida de api.php. Status:', response.status);
         if (response.ok && response.headers.get('Content-Type')?.includes('application/pdf')) {
-            console.log('[PUNTO DE CONTROL 6] Éxito. La respuesta es un PDF.');
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             window.open(url, '_blank');
@@ -330,11 +322,10 @@ async function highlightPdf(docId, codes) {
             resultContent.innerHTML = `<p class="mb-4">El PDF resaltado se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="resaltado.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
             resultModal.classList.remove('hidden');
         } else {
-            console.error('[PUNTO DE CONTROL 6] Fallo. La respuesta NO es un PDF.');
             await handleApiResponse(response);
         }
     } catch (error) {
         toast('Falló la comunicación con el servicio de resaltado.', 'error');
-        console.error('[PUNTO DE CONTROL 7] Error CRÍTICO en la solicitud fetch:', error);
+        console.error('Error CRÍTICO en la solicitud fetch:', error);
     }
 }
