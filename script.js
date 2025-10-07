@@ -1,5 +1,5 @@
 // script.js
-// Versión 1.6: Implementada la solución de validación sugerida por el usuario para corregir el error de resaltado.
+// Versión 1.7: Implementada la solución final con encodeURIComponent para máxima robustez.
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -74,13 +74,15 @@ async function applyConfig() {
 function initApp() {
     applyConfig();
     
+    // ---- MANEJADOR DE EVENTOS CON DECODEURICOMPONENT ----
     document.getElementById('mainContent').addEventListener('click', (event) => {
         const target = event.target;
-        if (!target || target.tagName !== 'BUTTON') return;
+        if (!target || !target.matches('button')) return;
 
         if (target.matches('button.btn-highlight')) {
             const docId = target.dataset.id;
-            const codes = target.dataset.codes;
+            // ✅ SOLUCIÓN: Decodificar la cadena de códigos para restaurarla a su estado original.
+            const codes = decodeURIComponent(target.dataset.codes);
             highlightPdf(docId, codes);
         }
         
@@ -135,7 +137,7 @@ function initApp() {
     document.querySelector('.tab.active').click();
 }
 
-// ---- FUNCIÓN RENDER CORREGIDA ----
+// ---- FUNCIÓN RENDER CON ENCODEURICOMPONENT ----
 function render(items, containerId, isSearchResult) {
     const container = document.getElementById(containerId);
     if (!items || items.length === 0) { container.innerHTML = '<p class="text-gray-500">No se encontraron documentos.</p>'; return; }
@@ -146,11 +148,11 @@ function render(items, containerId, isSearchResult) {
         
         let actionButtons = '';
         if (isSearchResult) {
-            // ✅ SOLUCIÓN 1: Validar si existen códigos ANTES de crear el botón.
             if (codesArray.length > 0) {
                 const codesStringForDataAttr = codesArray.join(',');
-                const escapedCodes = codesStringForDataAttr.replace(/"/g, '&quot;');
-                actionButtons = `<button class="btn btn--dark px-2 py-1 text-base btn-highlight" data-id="${item.id}" data-codes="${escapedCodes}">Resaltar Códigos</button>`;
+                // ✅ SOLUCIÓN: Codificar la cadena para que sea segura como atributo HTML.
+                const encodedCodes = encodeURIComponent(codesStringForDataAttr);
+                actionButtons = `<button class="btn btn--dark px-2 py-1 text-base btn-highlight" data-id="${item.id}" data-codes="${encodedCodes}">Resaltar Códigos</button>`;
             }
         } else {
             actionButtons = `<button onclick="editDoc(${item.id})" class="btn btn--warning px-2 py-1 text-base">Editar</button> <button onclick="requestDelete(${item.id})" class="btn btn--primary px-2 py-1 text-base">Eliminar</button>`;
@@ -291,9 +293,7 @@ function toggleCodes(btn) {
     btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos';
 }
 
-// ---- FUNCIÓN highlightPdf BLINDADA ----
 async function highlightPdf(docId, codes) {
-    // ✅ SOLUCIÓN 2: Blindar la función para que nunca falle, sin importar lo que reciba.
     if (!docId || !codes || codes.trim() === "") {
         toast('Error: Faltan el ID del documento o los códigos para resaltar.', 'error');
         console.error(`Llamada a highlightPdf bloqueada por parámetros inválidos. ID: ${docId}, Códigos: '${codes}'`);
