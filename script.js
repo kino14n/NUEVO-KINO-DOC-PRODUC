@@ -1,11 +1,9 @@
 // script.js
-// Versión 1.4: Añadidos marcadores de depuración en la función de resaltado.
+// Versión 1.5: Blindaje del manejador de eventos y la función de resaltado con verificaciones de ID.
 (function () {
     const orig = console.error;
     console.error = function (...args) {
-        if (args[0] && typeof args[0] === 'string' && args[0].includes('Expected number')) {
-            return;
-        }
+        if (args[0] && typeof args[0] === 'string' && args[0].includes('Expected number')) { return; }
         orig.apply(console, args);
     };
     window.onerror = function () { return true; };
@@ -26,13 +24,11 @@ document.getElementById('submitAccess').onclick = () => {
         document.getElementById('loginOverlay').classList.add('hidden');
         document.getElementById('mainContent').classList.remove('hidden');
         initApp();
-    } else {
-        document.getElementById('errorMsg').classList.remove('hidden');
-    }
+    } else { document.getElementById('errorMsg').classList.remove('hidden'); }
 };
 document.getElementById('accessInput').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('submitAccess').click(); });
 
-function toast(msg, type = 'info', d = 4000) {
+function toast(msg, type = 'info', d = 5000) {
     const c = document.getElementById('toast-container');
     const e = document.createElement('div');
     e.className = `toast ${type}`;
@@ -77,15 +73,35 @@ async function applyConfig() {
 
 function initApp() {
     applyConfig();
-
+    
+    // ---- MANEJADOR DE EVENTOS REFORZADO CON PUNTOS DE CONTROL ----
     document.getElementById('mainContent').addEventListener('click', (event) => {
         const target = event.target;
-        if (target && target.matches('button.btn-highlight')) {
+        // Solo nos interesan los clics en botones
+        if (!target || target.tagName !== 'BUTTON') return;
+
+        // Punto de control para el botón de resaltar
+        if (target.matches('button.btn-highlight')) {
+            console.log('[PUNTO DE CONTROL 1] Clic detectado en un botón de resaltar.');
             const docId = target.dataset.id;
             const codes = target.dataset.codes;
+            
+            console.log(`[PUNTO DE CONTROL 2] Leyendo atributos... ID: ${docId}, Códigos: ${codes}`);
+
+            // BARRERA DE SEGURIDAD: Si el ID es nulo, indefinido o vacío, detenemos todo aquí.
+            if (!docId || docId === 'undefined' || docId === null) {
+                const errorMsg = "Error de Interfaz Crítico: No se pudo leer el ID del documento desde el botón. La petición fue bloqueada.";
+                toast(errorMsg, 'error', 8000);
+                console.error(errorMsg, "Elemento del botón problemático:", target);
+                return; // Detiene la ejecución por completo.
+            }
+
+            console.log('[PUNTO DE CONTROL 3] El ID es válido. Llamando a highlightPdf...');
             highlightPdf(docId, codes);
         }
-        if (target && target.matches('button.btn-toggle-codes')) {
+        
+        // Punto de control para ver/ocultar códigos
+        if (target.matches('button.btn-toggle-codes')) {
             toggleCodes(target);
         }
     });
@@ -171,9 +187,7 @@ function render(items, containerId, isSearchResult) {
     }).join('');
 }
 
-
 function clearSearch() { document.getElementById('searchInput').value = ''; document.getElementById('results-search').innerHTML = ''; document.getElementById('search-alert').innerText = ''; }
-
 async function doSearch() {
     const rawInput = document.getElementById('searchInput').value.trim();
     if (!rawInput) return;
@@ -247,7 +261,6 @@ function downloadPdfs() { window.location.href = `${api}?action=download_pdfs`; 
 })();
 
 function clearCode() { document.getElementById('codeInput').value = ''; document.getElementById('results-code').innerHTML = ''; }
-
 async function doCodeSearch() {
     const code = document.getElementById('codeInput').value.trim();
     if (!code) return;
@@ -284,7 +297,6 @@ async function deleteDoc(id) {
 }
 
 function requestDelete(id) { pendingDeleteId = id; document.getElementById('deleteOverlay').classList.remove('hidden'); document.getElementById('deleteKeyInput').focus(); }
-
 function toggleCodes(btn) {
     const id = btn.dataset.id;
     const pre = document.getElementById(`codes${id}`);
@@ -293,35 +305,18 @@ function toggleCodes(btn) {
 }
 
 async function highlightPdf(docId, codes) {
-    // --- MARCADOR 1: INICIO DE LA FUNCIÓN ---
-    console.log(`[MARCADOR JS 1] Iniciando highlightPdf. Documento ID: ${docId}`);
-    console.log(`[MARCADOR JS 2] Códigos recibidos (string):`, codes);
-
-    if (!codes) {
-        toast('Este documento no tiene códigos asociados para resaltar.', 'info');
-        console.warn('[MARCADOR JS 3] Proceso detenido: no hay códigos.');
-        return;
-    }
-
     toast('Procesando PDF, por favor espera...', 'info');
-    
     const formData = new FormData();
     formData.append('action', 'highlight_pdf');
     formData.append('id', docId);
     formData.append('codes', codes);
-
-    // --- MARCADOR 2: DATOS A PUNTO DE SER ENVIADOS ---
-    console.log('[MARCADOR JS 3] FormData preparado para enviar a api.php:');
-    for (let [key, value] of formData.entries()) {
-        console.log(`  - ${key}: ${value}`);
-    }
-
+    
+    console.log('[PUNTO DE CONTROL 4] Enviando a api.php...');
     try {
         const response = await fetch(api, { method: 'POST', body: formData });
-        console.log('[MARCADOR JS 4] Respuesta recibida de api.php. Status:', response.status);
-
+        console.log('[PUNTO DE CONTROL 5] Respuesta recibida de api.php. Status:', response.status);
         if (response.ok && response.headers.get('Content-Type')?.includes('application/pdf')) {
-            console.log('[MARCADOR JS 5] La respuesta es un PDF. Procesando para mostrar.');
+            console.log('[PUNTO DE CONTROL 6] Éxito. La respuesta es un PDF.');
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             window.open(url, '_blank');
@@ -335,11 +330,11 @@ async function highlightPdf(docId, codes) {
             resultContent.innerHTML = `<p class="mb-4">El PDF resaltado se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="resaltado.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
             resultModal.classList.remove('hidden');
         } else {
-            console.error('[MARCADOR JS 5] La respuesta NO es un PDF. Es un error. Procesando como JSON.');
+            console.error('[PUNTO DE CONTROL 6] Fallo. La respuesta NO es un PDF.');
             await handleApiResponse(response);
         }
     } catch (error) {
         toast('Falló la comunicación con el servicio de resaltado.', 'error');
-        console.error('[MARCADOR JS 6] Error CRÍTICO en la solicitud fetch:', error);
+        console.error('[PUNTO DE CONTROL 7] Error CRÍTICO en la solicitud fetch:', error);
     }
 }
