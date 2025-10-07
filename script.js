@@ -1,5 +1,5 @@
 // script.js
-// Versión 1.8: Solución final usando data-attributes y event listener delegado para máxima robustez.
+// Versión 1.9: Aplicada la solución final sugerida por el usuario con event listeners delegados.
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -42,7 +42,7 @@ document.getElementById('accessInput').addEventListener('keypress', e => { if (e
 function toast(msg, type = 'info', d = 4000) {
     const c = document.getElementById('toast-container');
     const e = document.createElement('div');
-    e.className = `toast ${type}`; // Clases: info, success, error
+    e.className = `toast ${type}`;
     e.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()">×</button>`;
     c.appendChild(e);
     setTimeout(() => e.remove(), d);
@@ -90,20 +90,18 @@ async function applyConfig() {
 function initApp() {
     applyConfig();
     
-    // ✅ SOLUCIÓN: Event listener delegado para todas las acciones dinámicas.
+    // ✅ TU SOLUCIÓN: Event listener delegado para manejar todos los clics en botones dinámicos.
     document.getElementById('mainContent').addEventListener('click', (event) => {
-        const target = event.target.closest('button'); // Busca el botón más cercano al clic
+        const target = event.target.closest('button');
         if (!target) return;
 
-        // Manejador para el botón de resaltar
-        if (target.matches('button.btn-highlight')) {
+        if (target.matches('.btn-highlight')) {
             const docId = target.dataset.id;
             const codes = target.dataset.codes;
             highlightPdf(docId, codes);
         }
         
-        // Manejador para el botón de ver/ocultar códigos
-        if (target.matches('button.btn-toggle-codes')) {
+        if (target.matches('.btn-toggle-codes')) {
             toggleCodes(target);
         }
     });
@@ -142,7 +140,7 @@ function initApp() {
                 doConsultFilter();
             }
         } catch (error) {
-            // El error ya es manejado y mostrado por handleApiResponse
+            // Error manejado por handleApiResponse
         }
     }
 
@@ -169,7 +167,7 @@ function initApp() {
     document.querySelector('.tab.active').click();
 }
 
-// ✅ SOLUCIÓN: render() modificado para usar solo data-attributes en botones críticos.
+// ✅ TU SOLUCIÓN: La función render ahora usa data-attributes para el botón de resaltar.
 function render(items, containerId, isSearchResult) {
     const container = document.getElementById(containerId);
     if (!items || items.length === 0) {
@@ -188,7 +186,6 @@ function render(items, containerId, isSearchResult) {
                 actionButtons = `<button class="btn btn--dark px-2 py-1 text-base btn-highlight" data-id="${item.id}" data-codes="${escapedCodes}">Resaltar Códigos</button>`;
             }
         } else {
-            // Los onclick aquí son seguros porque solo pasan un ID numérico.
             actionButtons = `
                 <button onclick="editDoc(${item.id})" class="btn btn--warning px-2 py-1 text-base">Editar</button>
                 <button onclick="requestDelete(${item.id})" class="btn btn--primary px-2 py-1 text-base">Eliminar</button>
@@ -272,7 +269,7 @@ document.getElementById('form-upload').onsubmit = async (e) => {
         clearUploadForm();
         document.querySelector('[data-tab="tab-list"]').click();
     } catch (error) {
-        // El error ya es manejado por handleApiResponse
+        // Error manejado por handleApiResponse
     }
 };
 
@@ -386,7 +383,7 @@ async function deleteDoc(id) {
         await handleApiResponse(response);
         document.querySelector('.tab.active').click();
     } catch (error) {
-        // El error ya es manejado por handleApiResponse
+        // Error manejado por handleApiResponse
     }
 }
 
@@ -403,7 +400,6 @@ function toggleCodes(btn) {
     btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos';
 }
 
-// ✅ SOLUCIÓN: highlightPdf() blindado contra parámetros inválidos.
 async function highlightPdf(docId, codes) {
     if (!docId || !codes || codes.trim() === "") {
         toast('Error: Faltan el ID del documento o los códigos para resaltar.', 'error');
