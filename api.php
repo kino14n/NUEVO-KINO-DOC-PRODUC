@@ -108,7 +108,7 @@ switch ($action) {
         $responseHeaders[strtolower(trim($header[0]))][] = trim($header[1]);
         return $len;
     });
-    
+
     write_log("[PHP] Enviando solicitud cURL a: " . PDF_HIGHLIGHTER_URL);
     $responseBody = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
