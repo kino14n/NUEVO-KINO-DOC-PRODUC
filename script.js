@@ -1,4 +1,5 @@
-// script.js - Versión Final Corregida
+// script.js
+// Versión 3.0: Implementado flujo de extracción, validación y envío en el frontend.
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -366,24 +367,53 @@ function toggleCodes(btn) {
 }
 
 async function highlightPdf(docId, codes) {
-    if (!docId || !codes || codes.trim() === "") {
-        toast('Error: Faltan el ID del documento o los códigos para resaltar.', 'error');
-        console.error(`Llamada a highlightPdf bloqueada. ID: ${docId}, Códigos: '${codes}'`);
-        return;
+    
+    // --- PASO 1: EXTRACCIÓN Y ALMACENAMIENTO EN MEMORIA ---
+    const dataForHighlighter = {
+        id: docId,
+        codes: codes,
+        timestamp: new Date().toISOString()
+    };
+    console.log("Paso 1: Datos extraídos del resultado de búsqueda.", dataForHighlighter);
+
+    // --- PASO 2: VALIDACIÓN DE LOS DATOS EXTRAÍDOS ---
+    let isValid = true;
+    if (!dataForHighlighter.id || typeof dataForHighlighter.id !== 'string' || !/^\d+$/.test(dataForHighlighter.id)) {
+        toast('Error de validación: El ID del documento no es válido.', 'error');
+        console.error("VALIDATION FAILED: Invalid document ID.", dataForHighlighter.id);
+        isValid = false;
+    }
+    if (!dataForHighlighter.codes || typeof dataForHighlighter.codes !== 'string' || dataForHighlighter.codes.trim() === "") {
+        toast('Error de validación: La lista de códigos está vacía o es incorrecta.', 'error');
+        console.error("VALIDATION FAILED: Codes are missing or invalid.", dataForHighlighter.codes);
+        isValid = false;
     }
 
-    toast('Procesando PDF, por favor espera...', 'info');
+    if (!isValid) {
+        toast('La operación se detuvo por datos no válidos.', 'error');
+        return; 
+    }
+    console.log("Paso 2: Validación exitosa. Datos listos para enviar.");
+
+    // --- PASO 3: ENVÍO AL RESALTADOR ---
+    toast('Procesando PDF y extrayendo páginas...', 'info');
+    
     const formData = new FormData();
     formData.append('action', 'highlight_pdf');
-    formData.append('id', docId);
-    formData.append('codes', codes);
+    formData.append('id', dataForHighlighter.id);
+    formData.append('codes', dataForHighlighter.codes);
+
+    console.log("Paso 3: Enviando datos validados al backend (api.php).");
+
     try {
         const response = await fetch(api, { method: 'POST', body: formData });
         const contentType = response.headers.get('Content-Type');
+        
         if (response.ok && contentType && contentType.includes('application/pdf')) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             window.open(url, '_blank');
+            
             let pagesFound = [];
             const pagesHeader = response.headers.get('X-Pages-Found');
             if (pagesHeader) { 
@@ -393,14 +423,17 @@ async function highlightPdf(docId, codes) {
                     console.error("Error al parsear X-Pages-Found:", e); 
                 } 
             }
+            
             const resultModal = document.getElementById('highlightResultOverlay');
             const resultContent = document.getElementById('highlightResultContent');
-            let pagesHtml = '<p class="font-semibold">No se encontraron los códigos en el contenido del PDF.</p><p>Puedes descargar el archivo original para revisarlo.</p>';
+            
+            let pagesHtml = '<p class="font-semibold">No se encontraron los códigos en el PDF.</p><p>Se ha abierto el documento original para su revisión.</p>';
             if (pagesFound.length > 0) { 
-                pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; 
+                pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas del documento original:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; 
             }
+            
             if (resultContent) {
-                resultContent.innerHTML = `<p class="mb-4">El PDF resaltado se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="resaltado.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
+                resultContent.innerHTML = `<p class="mb-4">El PDF con las páginas extraídas se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="extracto.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
             }
             if (resultModal) resultModal.classList.remove('hidden');
         } else {
