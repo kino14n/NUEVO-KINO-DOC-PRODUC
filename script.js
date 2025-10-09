@@ -368,15 +368,15 @@ function toggleCodes(btn) {
 
 async function highlightPdf(docId, codes) {
     
-    // --- PASO 1: EXTRACCIÓN Y ALMACENAMIENTO EN MEMORIA ---
+    // PASO 1: EXTRACCIÓN Y ALMACENAMIENTO EN MEMORIA (del navegador)
     const dataForHighlighter = {
         id: docId,
         codes: codes,
         timestamp: new Date().toISOString()
     };
-    console.log("Paso 1: Datos extraídos del resultado de búsqueda.", dataForHighlighter);
+    console.log("Paso 1: Datos extraídos del DOM.", dataForHighlighter);
 
-    // --- PASO 2: VALIDACIÓN DE LOS DATOS EXTRAÍDOS ---
+    // PASO 2: VALIDACIÓN LOCAL ANTES DE ENVIAR
     let isValid = true;
     if (!dataForHighlighter.id || typeof dataForHighlighter.id !== 'string' || !/^\d+$/.test(dataForHighlighter.id)) {
         toast('Error de validación: El ID del documento no es válido.', 'error');
@@ -395,8 +395,8 @@ async function highlightPdf(docId, codes) {
     }
     console.log("Paso 2: Validación exitosa. Datos listos para enviar.");
 
-    // --- PASO 3: ENVÍO AL RESALTADOR ---
-    toast('Procesando PDF y extrayendo páginas...', 'info');
+    // PASO 3: ENVÍO AL BACKEND (PHP)
+    toast('Procesando PDF, por favor espera...', 'info');
     
     const formData = new FormData();
     formData.append('action', 'highlight_pdf');
@@ -445,7 +445,7 @@ async function highlightPdf(docId, codes) {
     }
 }
 
-// INICIALIZACIÓN
+// --- CÓDIGO DE INICIALIZACIÓN DE LA APLICACIÓN ---
 document.addEventListener('DOMContentLoaded', function() {
     const submitBtn = document.getElementById('submitAccess');
     const accessInput = document.getElementById('accessInput');
