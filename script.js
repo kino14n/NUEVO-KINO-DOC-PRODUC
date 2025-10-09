@@ -1,5 +1,6 @@
-// script.js - CÓDIGO COMPLETO CORREGIDO
-// Suprimir errores de Tailwind en consola
+// script.js
+// Versión 5.0: Corregido el error de inicialización del login.
+
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -10,84 +11,123 @@
     };
 })();
 
-// ====================================================================
-// CONSTANTES Y VARIABLES GLOBALES
-// ====================================================================
 const api = './api.php';
 const ACCESS_KEY = '565';
 const DELETION_KEY = '0101';
-
 let fullList = [];
 let pendingDeleteId = null;
 let intervalId = null;
 
-// ====================================================================
-// FUNCIONES UTILITARIAS (pueden estar fuera de DOMContentLoaded)
-// ====================================================================
-function startPolling(refreshFn) { 
-    stopPolling(); 
-    intervalId = setInterval(refreshFn, 60000); 
-}
+// --- FUNCIONES UTILITARIAS ---
+function startPolling(refreshFn) { stopPolling(); intervalId = setInterval(refreshFn, 60000); }
+function stopPolling() { if (intervalId !== null) clearInterval(intervalId); intervalId = null; }
+function toast(msg, type = 'info', d = 4000) { const c = document.getElementById('toast-container'); if (!c) return; const e = document.createElement('div'); e.className = `toast ${type}`; e.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()">×</button>`; c.appendChild(e); setTimeout(() => e.remove(), d); }
+function confirmDialog(msg) { return new Promise(resolve => { const ov = document.getElementById('confirmOverlay'); document.getElementById('confirmMsg').textContent = msg; ov.classList.remove('hidden'); document.getElementById('confirmOk').onclick = () => { ov.classList.add('hidden'); resolve(true); }; document.getElementById('confirmCancel').onclick = () => { ov.classList.add('hidden'); resolve(false); }; }); }
+async function handleApiResponse(response) { const json = await response.json(); if (response.ok && json.success) { if (json.message) toast(json.message, 'success'); return json; } else { const errorMessage = json.message || 'Ocurrió un error inesperado en el servidor.'; const errorDetails = json.details || 'No hay detalles técnicos disponibles.'; toast(errorMessage, 'error'); console.error("Error de API:", errorMessage, "\nDetalles:", errorDetails); return Promise.reject(json); } }
+async function applyConfig() { try { const response = await fetch(`${api}?action=get_config`); const config = await response.json(); const titleEl = document.getElementById('appHeaderTitle'); if (titleEl) titleEl.textContent = config.headerTitle || 'Buscador'; const appLogo = document.getElementById('appLogo'); if (appLogo && config.logoPath) { appLogo.src = config.logoPath; appLogo.classList.remove('hidden'); } } catch (error) { console.error('Error al cargar la configuración:', error); } }
 
-function stopPolling() { 
-    if (intervalId !== null) clearInterval(intervalId); 
-    intervalId = null; 
-}
+// --- LÓGICA DE LA APLICACIÓN ---
 
-function toast(msg, type = 'info', d = 4000) { 
-    const c = document.getElementById('toast-container'); 
-    if (!c) return; 
-    const e = document.createElement('div'); 
-    e.className = `toast ${type}`; 
-    e.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()">×</button>`; 
-    c.appendChild(e); 
-    setTimeout(() => e.remove(), d); 
-}
+function initApp() {
+    applyConfig();
+    
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent) {
+        mainContent.addEventListener('click', (event) => {
+            const target = event.target.closest('button');
+            if (!target) return;
 
-function confirmDialog(msg) { 
-    return new Promise(resolve => { 
-        const ov = document.getElementById('confirmOverlay'); 
-        document.getElementById('confirmMsg').textContent = msg; 
-        ov.classList.remove('hidden'); 
-        document.getElementById('confirmOk').onclick = () => { 
-            ov.classList.add('hidden'); 
-            resolve(true); 
+            if (target.classList.contains('btn-highlight')) {
+                const docId = target.dataset.id;
+                const codes = target.dataset.codes;
+                const docName = target.dataset.docname;
+                const pdfPath = target.dataset.pdfpath;
+                showHighlightConfirmation(docId, codes, docName, pdfPath);
+            }
+            
+            if (target.classList.contains('btn-toggle-codes')) {
+                toggleCodes(target);
+            }
+        });
+    }
+
+    const highlightConfirmCancel = document.getElementById('highlightConfirmCancel');
+    if (highlightConfirmCancel) {
+        highlightConfirmCancel.onclick = () => {
+            document.getElementById('highlightConfirmOverlay').classList.add('hidden');
+        };
+    }
+
+    const deleteKeyInput = document.getElementById('deleteKeyInput');
+    const deleteKeyOk = document.getElementById('deleteKeyOk');
+    if(deleteKeyOk){ 
+        deleteKeyOk.onclick = async () => { 
+            if (deleteKeyInput.value !== DELETION_KEY) { 
+                document.getElementById('deleteKeyError').classList.remove('hidden');
+                deleteKeyInput.value = ''; 
+                deleteKeyInput.focus();
+                return; 
+            } 
+            document.getElementById('deleteOverlay').classList.add('hidden'); 
+            document.getElementById('deleteKeyError').classList.add('hidden');
+            deleteKeyInput.value = '';
+            const ok = await confirmDialog('¿Está seguro de eliminar este documento? Esta acción no se puede deshacer.'); 
+            if (ok) await deleteDoc(pendingDeleteId); 
         }; 
-        document.getElementById('confirmCancel').onclick = () => { 
-            ov.classList.add('hidden'); 
-            resolve(false); 
+    }
+    
+    const deleteKeyCancel = document.getElementById('deleteKeyCancel');
+    if(deleteKeyCancel){
+        deleteKeyCancel.onclick = () => {
+            document.getElementById('deleteOverlay').classList.add('hidden');
+            document.getElementById('deleteKeyError').classList.add('hidden');
+            deleteKeyInput.value = '';
+        };
+    }
+    
+    const highlightClose = document.getElementById('highlightResultClose'); 
+    if (highlightClose) { 
+        highlightClose.onclick = () => { 
+            document.getElementById('highlightResultOverlay').classList.add('hidden'); 
         }; 
-    }); 
-}
+    }
 
-async function handleApiResponse(response) { 
-    const json = await response.json(); 
-    if (response.ok && json.success) { 
-        if (json.message) toast(json.message, 'success'); 
-        return json; 
-    } else { 
-        const errorMessage = json.message || 'Ocurrió un error inesperado en el servidor.'; 
-        const errorDetails = json.details || 'No hay detalles técnicos disponibles.'; 
-        toast(errorMessage, 'error'); 
-        console.error("Error de API:", errorMessage, "\nDetalles:", errorDetails); 
-        return Promise.reject(json); 
-    } 
-}
-
-async function applyConfig() { 
-    try { 
-        const response = await fetch(`${api}?action=get_config`); 
-        const config = await response.json(); 
-        const titleEl = document.getElementById('appHeaderTitle'); 
-        if (titleEl) titleEl.textContent = config.headerTitle || 'Buscador'; 
-        const appLogo = document.getElementById('appLogo'); 
-        if (appLogo && config.logoPath) { 
-            appLogo.src = config.logoPath; 
-            appLogo.classList.remove('hidden'); 
+    async function refreshList() { 
+        try { 
+            const response = await fetch(`${api}?action=list`); 
+            const json = await handleApiResponse(response); 
+            fullList = json.data || []; 
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab && activeTab.dataset.tab === 'tab-list') {
+                doConsultFilter();
+            }
+        } catch (error) { 
+            console.error('Error al refrescar lista:', error); 
         } 
-    } catch (error) { 
-        console.error('Error al cargar la configuración:', error); 
-    } 
+    }
+    refreshList();
+    startPolling(refreshList);
+    
+    document.querySelectorAll('.tab').forEach(tab => { 
+        tab.onclick = () => { 
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); 
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden')); 
+            tab.classList.add('active'); 
+            const tabContent = document.getElementById(tab.dataset.tab);
+            if(tabContent) tabContent.classList.remove('hidden'); 
+            if (tab.dataset.tab === 'tab-list') { 
+                refreshList(); 
+                startPolling(refreshList); 
+            } else { 
+                stopPolling(); 
+            } 
+            if (tab.dataset.tab === 'tab-upload' && !document.getElementById('docId').value) {
+                clearUploadForm();
+            }
+        }; 
+    });
+    const firstTab = document.querySelector('.tab.active');
+    if (firstTab) firstTab.click();
 }
 
 function render(items, containerId, isSearchResult) {
@@ -125,8 +165,11 @@ function render(items, containerId, isSearchResult) {
 }
 
 function showHighlightConfirmation(docId, codes, docName, pdfPath) {
+    console.log("Paso 1: Mostrando modal de confirmación con:", { docId, codes, docName, pdfPath });
+
     if (!docId || !codes || codes.trim() === "") {
         toast('Error: Faltan datos en el documento para poder resaltar.', 'error');
+        console.error("showHighlightConfirmation bloqueado por falta de datos.");
         return;
     }
     
@@ -144,6 +187,7 @@ function showHighlightConfirmation(docId, codes, docName, pdfPath) {
 }
 
 async function highlightPdf(docId, codes) {
+    console.log("Paso 2: Datos confirmados. Enviando al servidor...", { docId, codes });
     toast('Procesando PDF, por favor espera...', 'info');
     
     const formData = new FormData();
@@ -162,25 +206,15 @@ async function highlightPdf(docId, codes) {
             
             let pagesFound = [];
             const pagesHeader = response.headers.get('X-Pages-Found');
-            if (pagesHeader) { 
-                try { 
-                    pagesFound = JSON.parse(pagesHeader); 
-                } catch (e) { 
-                    console.error("Error al parsear X-Pages-Found:", e); 
-                } 
-            }
+            if (pagesHeader) { try { pagesFound = JSON.parse(pagesHeader); } catch (e) { console.error("Error al parsear X-Pages-Found:", e); } }
             
             const resultModal = document.getElementById('highlightResultOverlay');
             const resultContent = document.getElementById('highlightResultContent');
             
             let pagesHtml = '<p class="font-semibold">No se encontraron los códigos en el PDF.</p><p>Se ha abierto el documento original para su revisión.</p>';
-            if (pagesFound.length > 0) { 
-                pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas del documento original:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; 
-            }
+            if (pagesFound.length > 0) { pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas del documento original:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`; }
             
-            if (resultContent) { 
-                resultContent.innerHTML = `<p class="mb-4">El PDF con las páginas extraídas se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="extracto.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`; 
-            }
+            if (resultContent) { resultContent.innerHTML = `<p class="mb-4">El PDF con las páginas extraídas se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="extracto.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`; }
             if (resultModal) resultModal.classList.remove('hidden');
         } else {
             await handleApiResponse(response);
@@ -191,276 +225,52 @@ async function highlightPdf(docId, codes) {
     }
 }
 
-function clearSearch() { 
-    const input = document.getElementById('searchInput'); 
-    const results = document.getElementById('results-search'); 
-    const alert = document.getElementById('search-alert'); 
-    if (input) input.value = ''; 
-    if (results) results.innerHTML = ''; 
-    if (alert) alert.innerText = ''; 
-}
+function clearSearch() { const input = document.getElementById('searchInput'); const results = document.getElementById('results-search'); const alert = document.getElementById('search-alert'); if (input) input.value = ''; if (results) results.innerHTML = ''; if (alert) alert.innerText = ''; }
+async function doSearch() { const rawInput = document.getElementById('searchInput').value.trim(); if (!rawInput) return; const codes = [...new Set( rawInput .split(/\r?\n/) .map(line => line.trim().split(/\s+/)[0]) .filter(Boolean) )]; const formData = new FormData(); formData.append('action', 'search'); formData.append('codes', codes.join('\n')); try { const response = await fetch(api, { method: 'POST', body: formData }); const data = await response.json(); const foundCodes = new Set(data.flatMap(doc => doc.codes || [])); const missingCodes = codes.filter(c => !foundCodes.has(c)); const alertEl = document.getElementById('search-alert'); if (alertEl) { alertEl.innerText = missingCodes.length ? 'Códigos no encontrados: ' + missingCodes.join(', ') : ''; } render(data, 'results-search', true); } catch (error) { toast('Error de red al realizar la búsqueda.', 'error'); console.error(error); } }
+function clearUploadForm(event) { if (event) event.preventDefault(); const form = document.getElementById('form-upload'); const docId = document.getElementById('docId'); if (form) form.reset(); if (docId) docId.value = ''; toast('Formulario limpiado.', 'info'); }
+function clearConsultFilter() { const input = document.getElementById('consultFilterInput'); if (input) input.value = ''; doConsultFilter(); }
+function doConsultFilter() { const input = document.getElementById('consultFilterInput'); const term = input ? input.value.trim().toLowerCase() : ''; const filtered = fullList.filter(doc => doc.name.toLowerCase().includes(term) || doc.path.toLowerCase().includes(term)); render(filtered, 'results-list', false); }
+function downloadCsv() { let csv = 'Código,Documento\n'; fullList.forEach(doc => { if (doc.codes && doc.codes.length) { doc.codes.forEach(code => { csv += `"${code.replace(/"/g, '""')}","${doc.name.replace(/"/g, '""')}"\n`; }); } }); const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'documentos.csv'; a.click(); URL.revokeObjectURL(url); }
+function downloadPdfs() { window.location.href = `${api}?action=download_pdfs`; }
+async function doCodeSearch() { const input = document.getElementById('codeInput'); const code = input ? input.value.trim() : ''; if (!code) return; const formData = new FormData(); formData.append('action', 'search_by_code'); formData.append('code', code); try { const response = await fetch(api, { method: 'POST', body: formData }); const data = await response.json(); render(data, 'results-code', true); } catch(e) { toast('Error de red al buscar por código.', 'error'); } }
+function editDoc(id) { const doc = fullList.find(d => d.id === id); if (doc) { const uploadTab = document.querySelector('[data-tab="tab-upload"]'); if (uploadTab) uploadTab.click(); clearUploadForm(); document.getElementById('docId').value = doc.id; document.getElementById('name').value = doc.name; document.getElementById('date').value = doc.date; document.getElementById('codes').value = (doc.codes || []).join('\n'); } }
+async function deleteDoc(id) { try { const response = await fetch(`${api}?action=delete&id=${id}`); await handleApiResponse(response); const activeTab = document.querySelector('.tab.active'); if(activeTab) activeTab.click(); } catch (error) { console.error('Error al eliminar:', error); } }
+function requestDelete(id) { pendingDeleteId = id; const overlay = document.getElementById('deleteOverlay'); if(overlay) overlay.classList.remove('hidden'); const input = document.getElementById('deleteKeyInput'); if(input) input.focus(); }
+function toggleCodes(btn) { const id = btn.dataset.id; const pre = document.getElementById(`codes${id}`); if (!pre) return; const isHidden = pre.classList.toggle('hidden'); btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos'; }
 
-async function doSearch() { 
-    const rawInput = document.getElementById('searchInput').value.trim(); 
-    if (!rawInput) return; 
-    const codes = [...new Set(rawInput.split(/\r?\n/).map(line => line.trim().split(/\s+/)[0]).filter(Boolean))]; 
-    const formData = new FormData(); 
-    formData.append('action', 'search'); 
-    formData.append('codes', codes.join('\n')); 
-    try { 
-        const response = await fetch(api, { method: 'POST', body: formData }); 
-        const data = await response.json(); 
-        const foundCodes = new Set(data.flatMap(doc => doc.codes || [])); 
-        const missingCodes = codes.filter(c => !foundCodes.has(c)); 
-        const alertEl = document.getElementById('search-alert'); 
-        if (alertEl) { 
-            alertEl.innerText = missingCodes.length ? 'Códigos no encontrados: ' + missingCodes.join(', ') : ''; 
-        } 
-        render(data, 'results-search', true); 
-    } catch (error) { 
-        toast('Error de red al realizar la búsqueda.', 'error'); 
-        console.error(error); 
-    } 
-}
-
-function clearUploadForm(event) { 
-    if (event) event.preventDefault(); 
-    const form = document.getElementById('form-upload'); 
-    const docId = document.getElementById('docId'); 
-    if (form) form.reset(); 
-    if (docId) docId.value = ''; 
-    toast('Formulario limpiado.', 'info'); 
-}
-
-function clearConsultFilter() { 
-    const input = document.getElementById('consultFilterInput'); 
-    if (input) input.value = ''; 
-    doConsultFilter(); 
-}
-
-function doConsultFilter() { 
-    const input = document.getElementById('consultFilterInput'); 
-    const term = input ? input.value.trim().toLowerCase() : ''; 
-    const filtered = fullList.filter(doc => doc.name.toLowerCase().includes(term) || doc.path.toLowerCase().includes(term)); 
-    render(filtered, 'results-list', false); 
-}
-
-function downloadCsv() { 
-    let csv = 'Código,Documento\n'; 
-    fullList.forEach(doc => { 
-        if (doc.codes && doc.codes.length) { 
-            doc.codes.forEach(code => { 
-                csv += `"${code.replace(/"/g, '""')}","${doc.name.replace(/"/g, '""')}"\n`; 
-            }); 
-        } 
-    }); 
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }); 
-    const url = URL.createObjectURL(blob); 
-    const a = document.createElement('a'); 
-    a.href = url; 
-    a.download = 'documentos.csv'; 
-    a.click(); 
-    URL.revokeObjectURL(url); 
-}
-
-function downloadPdfs() { 
-    window.location.href = `${api}?action=download_pdfs`; 
-}
-
-async function doCodeSearch() { 
-    const input = document.getElementById('codeInput'); 
-    const code = input ? input.value.trim() : ''; 
-    if (!code) return; 
-    const formData = new FormData(); 
-    formData.append('action', 'search_by_code'); 
-    formData.append('code', code); 
-    try { 
-        const response = await fetch(api, { method: 'POST', body: formData }); 
-        const data = await response.json(); 
-        render(data, 'results-code', true); 
-    } catch(e) { 
-        toast('Error de red al buscar por código.', 'error'); 
-    } 
-}
-
-function editDoc(id) { 
-    const doc = fullList.find(d => d.id === id); 
-    if (doc) { 
-        const uploadTab = document.querySelector('[data-tab="tab-upload"]'); 
-        if (uploadTab) uploadTab.click(); 
-        clearUploadForm(); 
-        document.getElementById('docId').value = doc.id; 
-        document.getElementById('name').value = doc.name; 
-        document.getElementById('date').value = doc.date; 
-        document.getElementById('codes').value = (doc.codes || []).join('\n'); 
-    } 
-}
-
-async function deleteDoc(id) { 
-    try { 
-        const response = await fetch(`${api}?action=delete&id=${id}`); 
-        await handleApiResponse(response); 
-        const activeTab = document.querySelector('.tab.active'); 
-        if(activeTab) activeTab.click(); 
-    } catch (error) { 
-        console.error('Error al eliminar:', error); 
-    } 
-}
-
-function requestDelete(id) { 
-    pendingDeleteId = id; 
-    const overlay = document.getElementById('deleteOverlay'); 
-    if(overlay) overlay.classList.remove('hidden'); 
-    const input = document.getElementById('deleteKeyInput'); 
-    if(input) input.focus(); 
-}
-
-function toggleCodes(btn) { 
-    const id = btn.dataset.id; 
-    const pre = document.getElementById(`codes${id}`); 
-    if (!pre) return; 
-    const isHidden = pre.classList.toggle('hidden'); 
-    btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos'; 
-}
-
-// ====================================================================
-// ✅✅✅ TODO EL CÓDIGO DE INICIALIZACIÓN DENTRO DE DOMContentLoaded ✅✅✅
-// ====================================================================
+// --- CÓDIGO DE INICIALIZACIÓN (Solución al Error) ---
+// Se asegura de que todo el HTML esté cargado antes de ejecutar el script.
 document.addEventListener('DOMContentLoaded', function() {
     
-    // ===== LÓGICA DEL LOGIN =====
+    // Lógica del modal de login
     const submitBtn = document.getElementById('submitAccess');
     const accessInput = document.getElementById('accessInput');
     const loginOverlay = document.getElementById('loginOverlay');
     const mainContent = document.getElementById('mainContent');
     const errorMsg = document.getElementById('errorMsg');
     
-    if (submitBtn && accessInput) {
+    if (submitBtn) {
         submitBtn.addEventListener('click', function() {
-            if (accessInput.value === ACCESS_KEY) {
+            if (accessInput && accessInput.value === ACCESS_KEY) {
                 if (loginOverlay) loginOverlay.classList.add('hidden');
                 if (mainContent) mainContent.classList.remove('hidden');
+                // Solo si el login es correcto, se inicializa el resto de la app.
                 initApp();
             } else {
                 if (errorMsg) errorMsg.classList.remove('hidden');
             }
         });
-        
+    }
+    
+    if (accessInput) {
         accessInput.addEventListener('keypress', function(e) { 
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && submitBtn) {
                 submitBtn.click();
             }
         });
     }
-    
-    // ===== FUNCIÓN DE INICIALIZACIÓN DE LA APP =====
-    function initApp() {
-        applyConfig();
-        
-        // Event delegation para botones dinámicos
-        const mainContent = document.getElementById('mainContent');
-        if (mainContent) {
-            mainContent.addEventListener('click', (event) => {
-                const target = event.target.closest('button');
-                if (!target) return;
 
-                if (target.classList.contains('btn-highlight')) {
-                    const docId = target.dataset.id;
-                    const codes = target.dataset.codes;
-                    const docName = target.dataset.docname;
-                    const pdfPath = target.dataset.pdfpath;
-                    showHighlightConfirmation(docId, codes, docName, pdfPath);
-                }
-                
-                if (target.classList.contains('btn-toggle-codes')) {
-                    toggleCodes(target);
-                }
-            });
-        }
-
-        // Botones de modales
-        const highlightConfirmCancel = document.getElementById('highlightConfirmCancel');
-        if (highlightConfirmCancel) {
-            highlightConfirmCancel.onclick = () => {
-                document.getElementById('highlightConfirmOverlay').classList.add('hidden');
-            };
-        }
-
-        const deleteKeyInput = document.getElementById('deleteKeyInput');
-        const deleteKeyOk = document.getElementById('deleteKeyOk');
-        if(deleteKeyOk){ 
-            deleteKeyOk.onclick = async () => { 
-                if (deleteKeyInput.value !== DELETION_KEY) { 
-                    document.getElementById('deleteKeyError').classList.remove('hidden');
-                    deleteKeyInput.value = ''; 
-                    deleteKeyInput.focus();
-                    return; 
-                } 
-                document.getElementById('deleteOverlay').classList.add('hidden'); 
-                document.getElementById('deleteKeyError').classList.add('hidden');
-                deleteKeyInput.value = '';
-                const ok = await confirmDialog('¿Está seguro de eliminar este documento? Esta acción no se puede deshacer.'); 
-                if (ok) await deleteDoc(pendingDeleteId); 
-            }; 
-        }
-        
-        const deleteKeyCancel = document.getElementById('deleteKeyCancel');
-        if(deleteKeyCancel){
-            deleteKeyCancel.onclick = () => {
-                document.getElementById('deleteOverlay').classList.add('hidden');
-                document.getElementById('deleteKeyError').classList.add('hidden');
-                deleteKeyInput.value = '';
-            };
-        }
-        
-        const highlightClose = document.getElementById('highlightResultClose'); 
-        if (highlightClose) { 
-            highlightClose.onclick = () => { 
-                document.getElementById('highlightResultOverlay').classList.add('hidden'); 
-            }; 
-        }
-
-        // Refrescar lista
-        async function refreshList() { 
-            try { 
-                const response = await fetch(`${api}?action=list`); 
-                const json = await handleApiResponse(response); 
-                fullList = json.data || []; 
-                const activeTab = document.querySelector('.tab.active');
-                if (activeTab && activeTab.dataset.tab === 'tab-list') {
-                    doConsultFilter();
-                }
-            } catch (error) { 
-                console.error('Error al refrescar lista:', error); 
-            } 
-        }
-        refreshList();
-        startPolling(refreshList);
-        
-        // Sistema de pestañas
-        document.querySelectorAll('.tab').forEach(tab => { 
-            tab.onclick = () => { 
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); 
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden')); 
-                tab.classList.add('active'); 
-                const tabContent = document.getElementById(tab.dataset.tab);
-                if(tabContent) tabContent.classList.remove('hidden'); 
-                if (tab.dataset.tab === 'tab-list') { 
-                    refreshList(); 
-                    startPolling(refreshList); 
-                } else { 
-                    stopPolling(); 
-                } 
-                if (tab.dataset.tab === 'tab-upload' && !document.getElementById('docId').value) {
-                    clearUploadForm();
-                }
-            }; 
-        });
-        const firstTab = document.querySelector('.tab.active');
-        if (firstTab) firstTab.click();
-    }
-    
-    // ===== FORMULARIO DE SUBIDA =====
+    // Lógica del formulario de subida
     const uploadForm = document.getElementById('form-upload');
     if (uploadForm) {
         uploadForm.addEventListener('submit', async function(e) {
@@ -496,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ===== AUTOCOMPLETADO DE CÓDIGOS =====
+    // Lógica de sugerencias de búsqueda
     const codeInput = document.getElementById('codeInput');
     const suggestions = document.getElementById('suggestions');
     let timeoutId;
