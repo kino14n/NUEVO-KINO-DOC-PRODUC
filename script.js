@@ -1,5 +1,5 @@
 // script.js
-// Versión 4.0: Implementado modal de confirmación para el resaltado.
+// Versión 5.0: Corregido el error de inicialización del login.
 
 (function () {
     const orig = console.error;
@@ -238,12 +238,116 @@ async function deleteDoc(id) { try { const response = await fetch(`${api}?action
 function requestDelete(id) { pendingDeleteId = id; const overlay = document.getElementById('deleteOverlay'); if(overlay) overlay.classList.remove('hidden'); const input = document.getElementById('deleteKeyInput'); if(input) input.focus(); }
 function toggleCodes(btn) { const id = btn.dataset.id; const pre = document.getElementById(`codes${id}`); if (!pre) return; const isHidden = pre.classList.toggle('hidden'); btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos'; }
 
+// --- CÓDIGO DE INICIALIZACIÓN ---
+// ✅ Solución: Todo el código de inicialización está envuelto aquí.
 document.addEventListener('DOMContentLoaded', function() {
-    const submitBtn=document.getElementById("submitAccess");const accessInput=document.getElementById("accessInput");const loginOverlay=document.getElementById("loginOverlay");const mainContent=document.getElementById("mainContent");const errorMsg=document.getElementById("errorMsg");if(submitBtn){submitBtn.addEventListener("click",function(){if(accessInput&&accessInput.value===ACCESS_KEY){if(loginOverlay)loginOverlay.classList.add("hidden");if(mainContent)mainContent.classList.remove("hidden");initApp()}else{if(errorMsg)errorMsg.classList.remove("hidden")}})}
-    if(accessInput){accessInput.addEventListener("keypress",function(e){if(e.key==="Enter"&&submitBtn)submitBtn.click()})}
-    const uploadForm=document.getElementById("form-upload");if(uploadForm){uploadForm.addEventListener("submit",async function(e){e.preventDefault();const fileInput=uploadForm.querySelector('[name="file"]');const warningEl=document.getElementById("uploadWarning");if(fileInput&&fileInput.files[0]&&fileInput.files[0].size>10*1024*1024){if(warningEl)warningEl.classList.remove("hidden");return}
-    if(warningEl)warningEl.classList.add("hidden");const codesField=uploadForm.querySelector('[name="codes"]');if(codesField){let codesArray=codesField.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));codesField.value=codesArray.join("\n")}
-    const formData=new FormData(uploadForm);const docId=document.getElementById("docId");formData.append("action",docId&&docId.value?"edit":"upload");try{const response=await fetch(api,{method:"POST",body:formData});await handleApiResponse(response);clearUploadForm();const listTab=document.querySelector('[data-tab="tab-list"]');if(listTab)listTab.click()}catch(error){console.error("Error en upload:",error)}})}
-    const codeInput=document.getElementById("codeInput");const suggestions=document.getElementById("suggestions");let timeoutId;if(codeInput&&suggestions){codeInput.addEventListener("input",function(){clearTimeout(timeoutId);const term=codeInput.value.trim();if(!term){suggestions.classList.add("hidden");return}
-    timeoutId=setTimeout(async function(){try{const response=await fetch(`${api}?action=suggest&term=${encodeURIComponent(term)}`);const data=await response.json();if(data.length){suggestions.innerHTML=data.map(code=>`<div class="py-1 px-2 hover:bg-gray-100 cursor-pointer" data-code="${code}">${code}</div>`).join("");suggestions.classList.remove("hidden")}else{suggestions.classList.add("hidden")}}catch(error){console.error("Error en sugerencias:",error)}},200)});suggestions.addEventListener("click",function(e){const code=e.target.dataset.code;if(code){codeInput.value=code;suggestions.classList.add("hidden");doCodeSearch()}});document.addEventListener("click",function(e){if(!suggestions.contains(e.target)&&e.target!==codeInput){suggestions.classList.add("hidden")}})};
+    
+    // Lógica del modal de login
+    const submitBtn = document.getElementById('submitAccess');
+    const accessInput = document.getElementById('accessInput');
+    const loginOverlay = document.getElementById('loginOverlay');
+    const mainContent = document.getElementById('mainContent');
+    const errorMsg = document.getElementById('errorMsg');
+    
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            if (accessInput && accessInput.value === ACCESS_KEY) {
+                if (loginOverlay) loginOverlay.classList.add('hidden');
+                if (mainContent) mainContent.classList.remove('hidden');
+                // Solo se inicializa el resto de la app si el login es correcto
+                initApp();
+            } else {
+                if (errorMsg) errorMsg.classList.remove('hidden');
+            }
+        });
+    }
+    
+    if (accessInput) {
+        accessInput.addEventListener('keypress', function(e) { 
+            if (e.key === 'Enter' && submitBtn) {
+                submitBtn.click();
+            }
+        });
+    }
+
+    // Lógica del formulario de subida
+    const uploadForm = document.getElementById('form-upload');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileInput = uploadForm.querySelector('[name="file"]');
+            const warningEl = document.getElementById('uploadWarning');
+            
+            if (fileInput && fileInput.files[0] && fileInput.files[0].size > 10 * 1024 * 1024) {
+                if (warningEl) warningEl.classList.remove('hidden');
+                return;
+            }
+            if (warningEl) warningEl.classList.add('hidden');
+            
+            const codesField = uploadForm.querySelector('[name="codes"]');
+            if (codesField) {
+                let codesArray = codesField.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                codesField.value = codesArray.join('\n');
+            }
+            
+            const formData = new FormData(uploadForm);
+            const docId = document.getElementById('docId');
+            formData.append('action', docId && docId.value ? 'edit' : 'upload');
+            
+            try {
+                const response = await fetch(api, { method: 'POST', body: formData });
+                await handleApiResponse(response);
+                clearUploadForm();
+                const listTab = document.querySelector('[data-tab="tab-list"]');
+                if (listTab) listTab.click();
+            } catch (error) {
+                console.error('Error en upload:', error);
+            }
+        });
+    }
+
+    // Lógica de sugerencias de búsqueda
+    const codeInput = document.getElementById('codeInput');
+    const suggestions = document.getElementById('suggestions');
+    let timeoutId;
+    
+    if (codeInput && suggestions) {
+        codeInput.addEventListener('input', function() {
+            clearTimeout(timeoutId);
+            const term = codeInput.value.trim();
+            if (!term) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+            timeoutId = setTimeout(async function() {
+                try {
+                    const response = await fetch(`${api}?action=suggest&term=${encodeURIComponent(term)}`);
+                    const data = await response.json();
+                    if (data.length) {
+                        suggestions.innerHTML = data.map(code => `<div class="py-1 px-2 hover:bg-gray-100 cursor-pointer" data-code="${code}">${code}</div>`).join('');
+                        suggestions.classList.remove('hidden');
+                    } else {
+                        suggestions.classList.add('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error en sugerencias:', error);
+                }
+            }, 200);
+        });
+        
+        suggestions.addEventListener('click', function(e) {
+            const code = e.target.dataset.code;
+            if (code) {
+                codeInput.value = code;
+                suggestions.classList.add('hidden');
+                doCodeSearch();
+            }
+        });
+        
+        document.addEventListener('click', function(e) {
+            if (!suggestions.contains(e.target) && e.target !== codeInput) {
+                suggestions.classList.add('hidden');
+            }
+        });
+    }
 });
