@@ -1,6 +1,5 @@
-// script.js - Panel de Administración
-// ✅ VERSIÓN CORREGIDA: Todo el código dentro de DOMContentLoaded
-
+// script.js - CÓDIGO COMPLETO CORREGIDO
+// Suprimir errores de Tailwind en consola
 (function () {
     const orig = console.error;
     console.error = function (...args) {
@@ -11,16 +10,20 @@
     };
 })();
 
+// ====================================================================
+// CONSTANTES Y VARIABLES GLOBALES
+// ====================================================================
 const api = './api.php';
 const ACCESS_KEY = '565';
 const DELETION_KEY = '0101';
 
-// Variables globales (necesitan estar fuera para ser accesibles)
 let fullList = [];
 let pendingDeleteId = null;
 let intervalId = null;
 
-// Funciones utilitarias (pueden estar fuera de DOMContentLoaded)
+// ====================================================================
+// FUNCIONES UTILITARIAS (pueden estar fuera de DOMContentLoaded)
+// ====================================================================
 function startPolling(refreshFn) { 
     stopPolling(); 
     intervalId = setInterval(refreshFn, 60000); 
@@ -321,7 +324,7 @@ function toggleCodes(btn) {
 }
 
 // ====================================================================
-// ✅ TODO EL CÓDIGO DE INICIALIZACIÓN DEBE ESTAR AQUÍ DENTRO
+// ✅✅✅ TODO EL CÓDIGO DE INICIALIZACIÓN DENTRO DE DOMContentLoaded ✅✅✅
 // ====================================================================
 document.addEventListener('DOMContentLoaded', function() {
     
