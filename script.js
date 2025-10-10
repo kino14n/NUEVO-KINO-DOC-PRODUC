@@ -12,6 +12,7 @@
 })();
 
 const api = './api.php';
+const PDF_HIGHLIGHTER_URL = 'https://buscadordockino1-production.up.railway.app';
 const ACCESS_KEY = '565';
 const DELETION_KEY = '0101';
 let fullList = [];
