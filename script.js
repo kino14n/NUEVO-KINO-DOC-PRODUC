@@ -12,6 +12,83 @@
 })();
 
 const api = './api.php';
+
+// URL base del servicio de resaltado Python. Ajustar según despliegue.
+// Por ejemplo: 'http://localhost:8080' si app.py está sirviendo en ese puerto.
+const PDF_HIGHLIGHTER_URL = 'http://localhost:8080';
+
+// --- NUEVAS UTILIDADES PARA RESALTADO CLIENTE ---
+// Descarga el PDF como Blob desde la carpeta uploads.
+async function fetchPdfBlob(pdfPath) {
+    const response = await fetch(`uploads/${pdfPath}`);
+    if (!response.ok) throw new Error('Error al descargar el PDF');
+    return await response.blob();
+}
+
+// Convierte una lista de códigos separados por comas a saltos de línea
+function prepareCodesForHighlight(codes) {
+    if (!codes) return '';
+    return codes.split(',').map(c => c.trim()).filter(Boolean).join('\n');
+}
+
+// Variables para almacenar temporalmente el PDF y los códigos antes de resaltar.
+let pendingPdfBlob = null;
+let pendingHighlightCodes = '';
+
+// Envía el PDF almacenado y los códigos al servicio Python directamente.
+async function sendToHighlighter() {
+    if (!pendingPdfBlob || !pendingHighlightCodes) {
+        toast('No hay PDF ni códigos preparados para resaltar.', 'error');
+        return;
+    }
+    // Muestra aviso al usuario
+    toast('Procesando PDF, por favor espera...', 'info');
+    const formData = new FormData();
+    formData.append('pdf_file', pendingPdfBlob, 'documento.pdf');
+    formData.append('specific_codes', pendingHighlightCodes);
+    try {
+        // URL del servicio de resaltado; debería definirse en config o reemplazarse aquí.
+        const response = await fetch(PDF_HIGHLIGHTER_URL + '/highlight', { method: 'POST', body: formData });
+        const contentType = response.headers.get('Content-Type');
+        if (response.ok && contentType && contentType.includes('application/pdf')) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            // Abrir PDF resaltado en nueva pestaña
+            window.open(url, '_blank');
+            // Mostrar modal de resultado (opcional)
+            const pagesHeader = response.headers.get('X-Pages-Found');
+            let pagesFound = [];
+            if (pagesHeader) { try { pagesFound = JSON.parse(pagesHeader); } catch (e) { console.error('Error al parsear X-Pages-Found:', e); } }
+            const resultModal = document.getElementById('highlightResultOverlay');
+            const resultContent = document.getElementById('highlightResultContent');
+            if (resultContent) {
+                let pagesHtml = '<p class="font-semibold">No se encontraron los códigos en el PDF.</p><p>Se ha abierto el documento original para su revisión.</p>';
+                if (pagesFound.length > 0) {
+                    pagesHtml = `<p class="font-semibold">Códigos encontrados en las páginas del documento original:</p><ul class="list-disc list-inside mt-2"><li>${pagesFound.join('</li><li>')}</li></ul>`;
+                }
+                resultContent.innerHTML = `<p class="mb-4">El PDF con las páginas extraídas se ha abierto en una nueva pestaña.</p><div class="mt-4 p-2 bg-gray-100 rounded">${pagesHtml}</div><a href="${url}" download="extracto.pdf" class="btn btn--secondary btn--full mt-4">Descargar de nuevo</a>`;
+            }
+            if (resultModal) resultModal.classList.remove('hidden');
+        } else {
+            // Intenta obtener detalles del error en JSON
+            let errorDetails;
+            try {
+                const errJson = await response.json();
+                errorDetails = errJson.error || errJson.message || 'Error desconocido al resaltar el PDF';
+            } catch (e) {
+                errorDetails = 'Respuesta inválida del servicio de resaltado';
+            }
+            toast(errorDetails, 'error');
+        }
+    } catch (error) {
+        toast('Falló la comunicación con el servicio de resaltado.', 'error');
+        console.error('Error CRÍTICO en sendToHighlighter:', error);
+    } finally {
+        // Limpia memoria temporal después de enviar
+        pendingPdfBlob = null;
+        pendingHighlightCodes = '';
+    }
+}
 const ACCESS_KEY = '565';
 const DELETION_KEY = '0101';
 let fullList = [];
@@ -164,25 +241,33 @@ function render(items, containerId, isSearchResult) {
     }).join('');
 }
 
-function showHighlightConfirmation(docId, codes, docName, pdfPath) {
+async function showHighlightConfirmation(docId, codes, docName, pdfPath) {
     console.log("Paso 1: Mostrando modal de confirmación con:", { docId, codes, docName, pdfPath });
-
+    // Validaciones básicas
     if (!docId || !codes || codes.trim() === "") {
         toast('Error: Faltan datos en el documento para poder resaltar.', 'error');
         console.error("showHighlightConfirmation bloqueado por falta de datos.");
         return;
     }
-    
+    // Preparar el PDF y los códigos para el servicio Python
+    try {
+        pendingPdfBlob = await fetchPdfBlob(pdfPath);
+        pendingHighlightCodes = prepareCodesForHighlight(codes);
+    } catch (err) {
+        toast('Error al preparar el PDF para resaltar.', 'error');
+        console.error(err);
+        return;
+    }
+    // Mostrar la información en el modal de confirmación
     document.getElementById('highlightConfirmDocName').textContent = docName;
     document.getElementById('highlightConfirmPdfPath').textContent = pdfPath;
     document.getElementById('highlightConfirmCodes').textContent = codes.replace(/,/g, '\n');
-    
     const okButton = document.getElementById('highlightConfirmOk');
     okButton.onclick = () => {
+        // Oculta el modal y envía al resaltador Python en lugar de usar highlightPdf
         document.getElementById('highlightConfirmOverlay').classList.add('hidden');
-        highlightPdf(docId, codes);
+        sendToHighlighter();
     };
-    
     document.getElementById('highlightConfirmOverlay').classList.remove('hidden');
 }
 
