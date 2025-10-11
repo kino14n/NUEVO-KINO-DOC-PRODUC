@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Lógica de sugerencias de búsqueda
-    const codeInput = document.getElementById('codeInput');
+   
     const suggestions = document.getElementById('suggestions');
     let timeoutId;
     
