@@ -1,5 +1,5 @@
 // script.js
-// Versión 5.0: Corregido el error de inicialización del login con DOMContentLoaded.
+// Versión 5.0: Corregido el error de inicialización del login.
 
 (function () {
     const orig = console.error;
@@ -26,7 +26,7 @@ function confirmDialog(msg) { return new Promise(resolve => { const ov = documen
 async function handleApiResponse(response) { const json = await response.json(); if (response.ok && json.success) { if (json.message) toast(json.message, 'success'); return json; } else { const errorMessage = json.message || 'Ocurrió un error inesperado en el servidor.'; const errorDetails = json.details || 'No hay detalles técnicos disponibles.'; toast(errorMessage, 'error'); console.error("Error de API:", errorMessage, "\nDetalles:", errorDetails); return Promise.reject(json); } }
 async function applyConfig() { try { const response = await fetch(`${api}?action=get_config`); const config = await response.json(); const titleEl = document.getElementById('appHeaderTitle'); if (titleEl) titleEl.textContent = config.headerTitle || 'Buscador'; const appLogo = document.getElementById('appLogo'); if (appLogo && config.logoPath) { appLogo.src = config.logoPath; appLogo.classList.remove('hidden'); } } catch (error) { console.error('Error al cargar la configuración:', error); } }
 
-// --- LÓGICA DE LA APLICACIÓN (se llama después del login)---
+// --- LÓGICA DE LA APLICACIÓN ---
 
 function initApp() {
     applyConfig();
@@ -239,6 +239,7 @@ function requestDelete(id) { pendingDeleteId = id; const overlay = document.getE
 function toggleCodes(btn) { const id = btn.dataset.id; const pre = document.getElementById(`codes${id}`); if (!pre) return; const isHidden = pre.classList.toggle('hidden'); btn.textContent = isHidden ? 'Ver Códigos' : 'Ocultar Códigos'; }
 
 // --- CÓDIGO DE INICIALIZACIÓN (Solución al Error) ---
+// Se asegura de que todo el HTML esté cargado antes de ejecutar el script.
 document.addEventListener('DOMContentLoaded', function() {
     
     // Lógica del modal de login
@@ -253,6 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (accessInput && accessInput.value === ACCESS_KEY) {
                 if (loginOverlay) loginOverlay.classList.add('hidden');
                 if (mainContent) mainContent.classList.remove('hidden');
+                // Solo si el login es correcto, se inicializa el resto de la app.
                 initApp();
             } else {
                 if (errorMsg) errorMsg.classList.remove('hidden');
